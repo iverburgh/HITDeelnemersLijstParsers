@@ -7,7 +7,7 @@
     - Paasdatumberekening (Get-EasterSunday)
     - Leeftijdberekening (Get-AgeAtDate)
     - Verjaardagscheck (Get-BirthdayDuringCamp)
-    - Nederlandse labels (Get-DutchMonthName, Get-DutchGroupSizeLabel)
+    - Nederlandse labels (Get-DutchMonthName, Get-DutchDayName, Get-DutchGroupSizeLabel)
     - ImportExcel-installatie (Assert-HitImportExcel)
     - Excel-bestandsselectie met menu (Resolve-HitExcelPath)
     - Geboortedatum-parsing (ConvertFrom-HitBirthDate)
@@ -151,6 +151,28 @@ function Get-DutchMonthName {
         'juli', 'augustus', 'september', 'oktober', 'november', 'december'
     )
     return $months[$Month - 1]
+}
+
+function Get-DutchDayName {
+    <#
+        .SYNOPSIS
+        Geeft de Nederlandse dagnaam voor een dag van de week.
+
+        .PARAMETER DayOfWeek
+        De dag van de week als [System.DayOfWeek]-enum of als integer (0=zondag, 1=maandag, ..., 6=zaterdag).
+
+        .OUTPUTS
+        System.String -- De Nederlandse dagnaam (bijv. 'donderdag').
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateRange(0, 6)]
+        [int]$DayOfWeek
+    )
+
+    $days = @('zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag')
+    return $days[$DayOfWeek]
 }
 
 function Get-DutchGroupSizeLabel {
@@ -404,6 +426,7 @@ Export-ModuleMember -Function @(
     'Get-AgeAtDate',
     'Get-BirthdayDuringCamp',
     'Get-DutchMonthName',
+    'Get-DutchDayName',
     'Get-DutchGroupSizeLabel',
     'Assert-HitImportExcel',
     'Resolve-HitExcelPath',

@@ -139,8 +139,7 @@ $deadlineDateTime = [datetime]::new(
     $deadlineDate.Year, $deadlineDate.Month, $deadlineDate.Day, 22, 0, 0
 )
 
-$dutchDayNames    = @('zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag')
-$deadlineDayName  = $dutchDayNames[[int]$deadlineDateTime.DayOfWeek]
+$deadlineDayName   = Get-DutchDayName -DayOfWeek ([int]$deadlineDateTime.DayOfWeek)
 $deadlineMonthName = Get-DutchMonthName -Month $deadlineDateTime.Month
 $deadlineFormatted = "$deadlineDayName $($deadlineDateTime.Day) $deadlineMonthName"
 $deadlineTime      = $deadlineDateTime.ToString('HH:mm')
@@ -149,7 +148,7 @@ Write-Verbose "Uiterste besteldatum: $deadlineFormatted om $deadlineTime"
 
 # Uiterste verzenddatum e-mail: 3 weken vóór aanvang kamp
 $mailDeadlineDate      = $campStart.AddDays(-21)
-$mailDeadlineDayName   = $dutchDayNames[[int]$mailDeadlineDate.DayOfWeek]
+$mailDeadlineDayName   = Get-DutchDayName -DayOfWeek ([int]$mailDeadlineDate.DayOfWeek)
 $mailDeadlineMonthName = Get-DutchMonthName -Month $mailDeadlineDate.Month
 $mailDeadlineFormatted = "$mailDeadlineDayName $($mailDeadlineDate.Day) $mailDeadlineMonthName $($mailDeadlineDate.Year)"
 
