@@ -9,6 +9,7 @@ PowerShell-scriptsuite voor het verwerken van HIT-deelnemerslijsten (Scouting Ne
 | `Get-HitStatistic.ps1` | Toont statistieken over de aanmeldingen als tekstrapport |
 | `Export-HitBijzonderheden.ps1` | Exporteert een Excel-lijst met alleen deelnemers met dieet of aandachtspunten |
 | `Export-HitContactgegevens.ps1` | Exporteert een Excel-lijst met contactgegevens van alle deelnemers |
+| `Mail01-3_Weken_voor_Goede_Vrijdag.ps1` | Genereert een kopieerklare e-mail (BCC, onderwerp, body) voor de 'Het is bijna zover!'-mailing |
 | `HitHelpers.psm1` | Gedeelde helperfuncties, automatisch ingeladen door de scripts |
 
 ---
@@ -121,6 +122,45 @@ Outputbestandsnaam: `Deelnemerslijst_[naam]_[jaar]_Contactgegevens.xlsx`
 
 ---
 
+## Mail01-3_Weken_voor_Goede_Vrijdag.ps1
+
+Genereert een kopieerklare e-mail voor de 'Het is bijna zover!'-mailing, klaar om te plakken in Gmail.
+
+De output bestaat uit drie afzonderlijk te kopiëren secties:
+- **BCC** — alle e-mailadressen van deelnemers uit het Excel-bestand (kolom `Mailadres`)
+- **Onderwerp** — `[KampNaam] - Het is bijna zover!`
+- **Body** — volledig opgemaakt bericht met deelnemersinformatie, merchandise en formulierverzoek
+
+Bovenaan de output verschijnt een opvallende waarschuwing met de uiterste verzenddatum (3 weken vóór Goede Vrijdag).
+
+Het script berekent automatisch:
+- De kampnaam uit de kolom `Kamp` in het Excel-bestand
+- Het aantal weken tot het kamp (op basis van de huidige datum)
+- De uiterste besteldatum voor merchandise (donderdag 22:00, twee weken vóór het kamp)
+- De uiterste verzenddatum van de e-mail (drie weken vóór Goede Vrijdag)
+
+### Gebruik
+
+```powershell
+.\Mail01-3_Weken_voor_Goede_Vrijdag.ps1
+.\Mail01-3_Weken_voor_Goede_Vrijdag.ps1 -TikkieLink "https://tikkie.me/pay/abc123" -GoogleFormLink "https://forms.gle/xyz789"
+.\Mail01-3_Weken_voor_Goede_Vrijdag.ps1 -Verbose
+```
+
+### Parameters
+
+| Parameter | Verplicht | Standaard | Beschrijving |
+|---|---|---|---|
+| `-Year` | Nee | Huidig jaar | Jaar van het HIT-kamp, voor paasdatumberekening |
+| `-TikkieLink` | Nee | `https://tikkielink.nl/` | Tikkie-betaallink voor merchandise |
+| `-DeelnemersinformatieLink` | Nee | `https://deelnemers.informatie.nl/` | Link naar de deelnemersinformatiepagina |
+| `-GoogleFormLink` | Nee | `https://google.form.nl/` | Link naar het Google-formulier voor merchandise en aanvullende vragen |
+| `-MerchandisePad` | Nee | `Merchandise.png` | Pad naar de merchandise-afbeelding (alleen bestandsnaam wordt in de mail getoond) |
+| `-EmailKolom` | Nee | `Mailadres` | Kolomnaam in het Excel-bestand met de e-mailadressen |
+| `-Verbose` | Nee | — | Toont gedetailleerde voortgangsberichten |
+
+---
+
 ## Bestandsselectie (alle scripts)
 
 Alle scripts zoeken automatisch naar het invoerbestand in dezelfde map als het script:
@@ -152,6 +192,7 @@ Alle scripts verwachten een `.xlsx`-bestand zoals geëxporteerd uit het Scouting
 | `Naam noodcontact` | Contactgegevens | Naam van de contactpersoon |
 | `Telefoonnummer noodcontact` | Contactgegevens | Telefoonnummer noodcontact |
 | `Mobiel` | Contactgegevens | Mobiel nummer van de deelnemer |
+| `Mailadres` | E-mailgenerator | E-mailadres van de deelnemer, gebruikt voor de BCC-lijst |
 
 Overige kolommen worden genegeerd.
 
