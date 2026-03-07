@@ -35,7 +35,7 @@ Statistieken over aanmeldingen [Zeilzwerf Fryslân] [2026]:
 - 5 x 17 jaar oud
 - 6 x 18 jaar oud
 
-- Sam Vink wordt 17 op 5 april
+- Jan de Vries wordt 17 op 5 april
 ```
 
 ### Onderdelen rapport
