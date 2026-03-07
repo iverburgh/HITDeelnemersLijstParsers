@@ -11,6 +11,7 @@ PowerShell-scriptsuite voor het verwerken van HIT-deelnemerslijsten (Scouting Ne
 | `Export-HitContactgegevens.ps1` | Exporteert een Excel-lijst met contactgegevens van alle deelnemers |
 | `Mail01-3_Weken_voor_Goede_Vrijdag.ps1` | Genereert een kopieerklare e-mail (BCC, onderwerp, body) voor de 'Het is bijna zover!'-mailing |
 | `Mail02-1_Dag_voor_Merchandise_Deadline.ps1` | Genereert een kopieerklare herinneringsmail over de aankomende merchandise-besteldatum |
+| `Mail03-1_Week_voor_Goede_Vrijdag.ps1` | Genereert een kopieerklare e-mail voor 1 week vóór het kamp, met automatisch opgehaalde weersvoorspelling |
 | `HitHelpers.psm1` | Gedeelde helperfuncties, automatisch ingeladen door de scripts |
 
 ---
@@ -193,6 +194,51 @@ Bovenaan de output verschijnt een waarschuwing met de uiterste verzenddatum (de 
 | `-Year` | Nee | Huidig jaar | Jaar van het HIT-kamp, voor paasdatumberekening |
 | `-TikkieLink` | Nee | `https://tikkielink.nl/` | Tikkie-betaallink voor merchandise |
 | `-GoogleFormLink` | Nee | `https://google.form.nl/` | Link naar het Google-formulier voor de merchandise bestelling |
+| `-EmailKolom` | Nee | `Mailadres` | Kolomnaam in het Excel-bestand met de e-mailadressen |
+| `-Verbose` | Nee | — | Toont gedetailleerde voortgangsberichten |
+
+---
+
+## Mail03-1_Week_voor_Goede_Vrijdag.ps1
+
+Genereert een kopieerklare e-mail voor de '1 week voor het kamp'-mailing, klaar om te plakken in Gmail.
+
+De output bestaat uit drie afzonderlijk te kopiëren secties:
+- **BCC** — alle e-mailadressen van deelnemers uit het Excel-bestand (kolom `Mailadres`)
+- **Onderwerp** — `[KampNaam] - Nog maar 1 week!`
+- **Body** — volledig opgemaakt bericht met start- en afsluitingsinfo, formulierstatus, en weersvoorspelling
+
+Bovenaan de output verschijnt een waarschuwing met de uiterste verzenddatum (exact 1 week vóór Goede Vrijdag = campStart − 7 dagen, ook een vrijdag).
+
+Het script berekent en haalt automatisch op:
+- De kampnaam uit de kolom `Kamp` in het Excel-bestand
+- De uiterste verzenddatum van de e-mail (vrijdag, 1 week vóór Goede Vrijdag)
+- De weersvoorspelling voor het kampweekend via de **Open-Meteo API** (gratis, geen registratie, locatie Sneek)  
+  — bij een mislukte API-aanroep verschijnt een waarschuwing en wordt een plaatshouder in de body geplaatst
+
+### Gebruik
+
+```powershell
+.\Mail03-1_Week_voor_Goede_Vrijdag.ps1 -AantalIngevuldeFormulieren 16
+.\Mail03-1_Week_voor_Goede_Vrijdag.ps1 -AantalIngevuldeFormulieren 20 -GoogleFormLink "https://forms.gle/xyz789" -DeelnemersinformatieLink "https://hit.scouting.nl/.../file"
+.\Mail03-1_Week_voor_Goede_Vrijdag.ps1 -AantalIngevuldeFormulieren 16 -Year 2027
+.\Mail03-1_Week_voor_Goede_Vrijdag.ps1 -AantalIngevuldeFormulieren 16 -Verbose
+```
+
+### Parameters
+
+| Parameter | Verplicht | Standaard | Beschrijving |
+|---|---|---|---|
+| `-Year` | Nee | Huidig jaar | Jaar van het HIT-kamp, voor paasdatumberekening |
+| `-AantalIngevuldeFormulieren` | **Ja** | — | Aantal deelnemers dat het Google-formulier al heeft ingevuld (te controleren in Google Forms) |
+| `-DeelnemersinformatieLink` | Nee | `https://deelnemers.informatie.nl/` | Link naar de deelnemersinformatiepagina |
+| `-GoogleFormLink` | Nee | `https://google.form.nl/` | Link naar het Google-formulier voor aanvullende kampinformatie |
+| `-StartLocatie` | Nee | `Scoutingcentrum Sneek in Sneek` | Naam en plaats van de startlocatie van het kamp |
+| `-StartTijd` | Nee | `19:00` | Tijdstip waarop deelnemers aanwezig moeten zijn voor de start |
+| `-OpeningsTijd` | Nee | `19:30` | Tijdstip waarop het kamp officieel opent |
+| `-MedeKampNaam` | Nee | `HIT Sail Fryslân` | Naam van het mede-kamp waarmee de afsluiting gezamenlijk plaatsvindt |
+| `-AfsluitingsTijd` | Nee | `13:00` | Tijdstip van de gezamenlijke afsluiting |
+| `-WelkomOudersTijd` | Nee | `12:30` | Tijdstip waarop ouders welkom zijn bij de afsluiting |
 | `-EmailKolom` | Nee | `Mailadres` | Kolomnaam in het Excel-bestand met de e-mailadressen |
 | `-Verbose` | Nee | — | Toont gedetailleerde voortgangsberichten |
 
