@@ -10,6 +10,7 @@ PowerShell-scriptsuite voor het verwerken van HIT-deelnemerslijsten (Scouting Ne
 | `Export-HitBijzonderheden.ps1` | Exporteert een Excel-lijst met alleen deelnemers met dieet of aandachtspunten |
 | `Export-HitContactgegevens.ps1` | Exporteert een Excel-lijst met contactgegevens van alle deelnemers |
 | `Mail01-3_Weken_voor_Goede_Vrijdag.ps1` | Genereert een kopieerklare e-mail (BCC, onderwerp, body) voor de 'Het is bijna zover!'-mailing |
+| `Mail02-1_Dag_voor_Merchandise_Deadline.ps1` | Genereert een kopieerklare herinneringsmail over de aankomende merchandise-besteldatum |
 | `HitHelpers.psm1` | Gedeelde helperfuncties, automatisch ingeladen door de scripts |
 
 ---
@@ -156,6 +157,42 @@ Het script berekent automatisch:
 | `-DeelnemersinformatieLink` | Nee | `https://deelnemers.informatie.nl/` | Link naar de deelnemersinformatiepagina |
 | `-GoogleFormLink` | Nee | `https://google.form.nl/` | Link naar het Google-formulier voor merchandise en aanvullende vragen |
 | `-MerchandisePad` | Nee | `Merchandise.png` | Pad naar de merchandise-afbeelding (alleen bestandsnaam wordt in de mail getoond) |
+| `-EmailKolom` | Nee | `Mailadres` | Kolomnaam in het Excel-bestand met de e-mailadressen |
+| `-Verbose` | Nee | — | Toont gedetailleerde voortgangsberichten |
+
+---
+
+## Mail02-1_Dag_voor_Merchandise_Deadline.ps1
+
+Genereert een kopieerklare herinneringsmail over de aankomende merchandise-besteldatum, klaar om te plakken in Gmail. Verstuur deze mail de dag vóór de merchandise-deadline (dus de donderdag ervoor).
+
+De merchandise-deadline is de **donderdagavond om 22:00, twee weken vóór de start van het kamp**.
+Ga terug vanuit (campStart − 14 dagen) naar de laatste donderdag op of vóór die datum.
+Deze mail verstuur je uiterlijk **twee dagen vóór de deadline** (de dinsdag ervoor).
+
+De output bestaat uit drie afzonderlijk te kopiëren secties:
+- **BCC** — alle e-mailadressen van deelnemers uit het Excel-bestand (kolom `Mailadres`)
+- **Onderwerp** — `[KampNaam] - Reminder merchandise bestelling`
+- **Body** — korte herinnering met de uiterste besteldatum
+
+Bovenaan de output verschijnt een waarschuwing met de uiterste verzenddatum (de donderdag vóór de merchandise-deadline).
+
+### Gebruik
+
+```powershell
+.\Mail02-1_Dag_voor_Merchandise_Deadline.ps1
+.\Mail02-1_Dag_voor_Merchandise_Deadline.ps1 -TikkieLink "https://tikkie.me/pay/abc123" -GoogleFormLink "https://forms.gle/xyz789"
+.\Mail02-1_Dag_voor_Merchandise_Deadline.ps1 -Year 2027
+.\Mail02-1_Dag_voor_Merchandise_Deadline.ps1 -Verbose
+```
+
+### Parameters
+
+| Parameter | Verplicht | Standaard | Beschrijving |
+|---|---|---|---|
+| `-Year` | Nee | Huidig jaar | Jaar van het HIT-kamp, voor paasdatumberekening |
+| `-TikkieLink` | Nee | `https://tikkielink.nl/` | Tikkie-betaallink voor merchandise |
+| `-GoogleFormLink` | Nee | `https://google.form.nl/` | Link naar het Google-formulier voor de merchandise bestelling |
 | `-EmailKolom` | Nee | `Mailadres` | Kolomnaam in het Excel-bestand met de e-mailadressen |
 | `-Verbose` | Nee | — | Toont gedetailleerde voortgangsberichten |
 
