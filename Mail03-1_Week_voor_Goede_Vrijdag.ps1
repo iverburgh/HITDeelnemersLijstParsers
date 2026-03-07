@@ -65,6 +65,12 @@
     Het tijdstip waarop ouders welkom zijn bij de afsluiting.
     Standaard: '12:30'
 
+    .PARAMETER TestWeerDatum
+    Optionele startdatum voor de weerscheck, uitsluitend bedoeld voor testdoeleinden.
+    Gebruik dit als Goede Vrijdag nog buiten het 16-daagse voorspellingsvenster van Open-Meteo valt.
+    Als Goede Vrijdag wél binnen het venster valt, wordt deze parameter genegeerd en worden de
+    echte kampdatums gebruikt. Formaat: 'yyyy-MM-dd' of een DateTime-waarde.
+
     .PARAMETER EmailKolom
     De naam van de kolom in het Excel-bestand die de e-mailadressen van de deelnemers bevat.
     Standaard: 'Mailadres'
@@ -134,6 +140,9 @@ param(
     [Parameter(HelpMessage = 'Tijdstip waarop ouders welkom zijn bij de afsluiting.')]
     [string]$WelkomOudersTijd = '12:30',
 
+    [Parameter(HelpMessage = 'Startdatum voor de weerscheck. Wordt automatisch genegeerd als Goede Vrijdag binnen het 16-daagse voorspellingsvenster valt; anders wordt deze datum gebruikt. Standaard: de huidige datum.')]
+    [datetime]$TestWeerDatum = (Get-Date),
+
     [Parameter(HelpMessage = 'Kolomnaam in het Excel-bestand met de e-mailadressen van de deelnemers.')]
     [string]$EmailKolom = 'Mailadres'
 )
@@ -188,15 +197,30 @@ $tempOverdag      = '?'
 $tempNacht        = '?'
 $weatherFetched   = $false
 
+$campStartStr = $campStart.ToString('yyyy-MM-dd')
+$campEndStr   = $campEnd.ToString('yyyy-MM-dd')
+
+# Open-Meteo forecast reikt maximaal 16 dagen vooruit.
+# Goede Vrijdag binnen het venster → echte kampdata; anders → TestWeerDatum (standaard: vandaag).
+$forecastWindowEnd = (Get-Date).AddDays(16)
+if ($campStart -le $forecastWindowEnd) {
+    $weerStartStr = $campStartStr
+    $weerEndStr   = $campEndStr
+    Write-Verbose "Goede Vrijdag valt binnen het voorspellingsvenster: kampdata gebruikt voor weerscheck."
+}
+else {
+    $weerStartStr = $TestWeerDatum.ToString('yyyy-MM-dd')
+    $weerEndStr   = $TestWeerDatum.AddDays(3).ToString('yyyy-MM-dd')
+    Write-Verbose "Kamp valt nog buiten de 16-daagse voorspelling: weerscheck op $weerStartStr t/m $weerEndStr."
+}
+
 try {
-    $campStartStr = $campStart.ToString('yyyy-MM-dd')
-    $campEndStr   = $campEnd.ToString('yyyy-MM-dd')
-    $weatherUri   = (
+    $weatherUri = (
         'https://api.open-meteo.com/v1/forecast' +
         '?latitude=53.0325&longitude=5.6575' +
         '&daily=weather_code,temperature_2m_max,temperature_2m_min' +
         '&timezone=Europe%2FAmsterdam' +
-        "&start_date=$campStartStr&end_date=$campEndStr"
+        "&start_date=$weerStartStr&end_date=$weerEndStr"
     )
 
     Write-Verbose "Weersvoorspelling ophalen: $weatherUri"
@@ -228,7 +252,12 @@ try {
     Write-Verbose "Weersvoorspelling: $weerOmschrijving, overdag ${tempOverdag}°C, nacht ${tempNacht}°C"
 }
 catch {
-    Write-Warning "Weersvoorspelling kon niet worden opgehaald via Open-Meteo: $($_.Exception.Message)"
+    $apiReason = $null
+    if ($_.ErrorDetails.Message) {
+        try { $apiReason = ($_.ErrorDetails.Message | ConvertFrom-Json).reason } catch {}
+    }
+    $foutmelding = if ($apiReason) { $apiReason } else { $_.Exception.Message }
+    Write-Warning "Weersvoorspelling kon niet worden opgehaald via Open-Meteo: $foutmelding"
 }
 
 if ($weatherFetched) {
