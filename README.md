@@ -9,6 +9,7 @@ PowerShell-scriptsuite voor het verwerken van HIT-deelnemerslijsten (Scouting Ne
 | `Get-HitStatistic.ps1` | Toont statistieken over de aanmeldingen als tekstrapport |
 | `Export-HitBijzonderheden.ps1` | Exporteert een Excel-lijst met alleen deelnemers met dieet of aandachtspunten |
 | `Export-HitContactgegevens.ps1` | Exporteert een Excel-lijst met contactgegevens van alle deelnemers |
+| `Compare-HitDeelnemerslijst.ps1` | Vergelijkt twee deelnemerslijsten op naam en geboortedatum (terugkerende deelnemers) |
 | `Mail01-3_Weken_voor_Goede_Vrijdag.ps1` | Genereert een kopieerklare e-mail (BCC, onderwerp, body) voor de 'Het is bijna zover!'-mailing |
 | `Mail02-1_Dag_voor_Merchandise_Deadline.ps1` | Genereert een kopieerklare herinneringsmail over de aankomende merchandise-besteldatum |
 | `Mail03-1_Week_voor_Goede_Vrijdag.ps1` | Genereert een kopieerklare e-mail voor 1 week vóór het kamp, met automatisch opgehaalde weersvoorspelling |
@@ -244,6 +245,53 @@ Het script berekent en haalt automatisch op:
 
 ---
 
+## Compare-HitDeelnemerslijst.ps1
+
+Vergelijkt twee deelnemerslijsten (xlsx of csv) en zoekt naar deelnemers die in beide jaren voorkomen, op basis van **volledige naam** en **geboortedatum**.
+
+De gebruiker kiest interactief via een console-keuzemenu:
+1. **Deelnemerslijst 1** — de lijst van het voorgaande jaar
+2. **Deelnemerslijst 2** — de lijst van het huidige jaar
+
+De output toont het aantal deelnemers per lijst en een tabel met de overeenkomende deelnemers (naam + geboortedatum).
+
+```
+══════════════════════════════════════════════════
+  Resultaat
+══════════════════════════════════════════════════
+
+Deelnemerslijst 1: 25 deelnemer(s)
+  D:\...\Zeilzwerf_2025-alles.xlsx
+Deelnemerslijst 2: 28 deelnemer(s)
+  D:\...\Zeilzwerf_2026-alles.xlsx
+
+In deelnemerslijst 2 staan 7 deelnemer(s) die ook in deelnemerslijst 1 staan:
+
+VolledigeNaam      Geboortedatum
+-------------      -------------
+Jan de Vries       13-06-2008
+...
+```
+
+### Ondersteunde bestandsformaten
+
+Beide bestanden mogen elk afzonderlijk `.xlsx` of `.csv` zijn. Kolommen worden automatisch gedetecteerd:
+
+| Formaat | Voornaam | Tussenvoegsel | Achternaam | Geboortedatum |
+|---|---|---|---|---|
+| Raw CSV (puntkomma) | `Lid voornaam` | `Lid tussenvoegsel` | `Lid achternaam` | `Lid geboortedatum` |
+| Excel (hernoemde headers) | `Voornaam` | `Tussenvoegsel` (optioneel) | `Achternaam` | `Geboortedatum` |
+
+### Gebruik
+
+```powershell
+.\Compare-HitDeelnemerslijst.ps1
+```
+
+Geen parameters — al het interactieve verloopt via console-prompts.
+
+---
+
 ## Bestandsselectie (alle scripts)
 
 Alle scripts zoeken automatisch naar het invoerbestand in dezelfde map als het script:
@@ -253,6 +301,8 @@ Alle scripts zoeken automatisch naar het invoerbestand in dezelfde map als het s
    - Meerdere treffers → interactief keuzemenu
 2. Als geen `*-alles.xlsx` gevonden: zoek op `*.xlsx` (exclusief eerder gegenereerde `Deelnemerslijst_*`-bestanden), met dezelfde selectielogica
 3. Als ook dat niets oplevert → foutmelding
+
+`Compare-HitDeelnemerslijst.ps1` gebruikt een ruimere zoekopdracht: alle `*.xlsx`- en `*.csv`-bestanden in de scriptmap (exclusief `Deelnemerslijst_*`). De gebruiker kiest telkens interactief voor zowel lijst 1 als lijst 2.
 
 Gegenereerde outputbestanden (`Deelnemerslijst_*`) worden bij de automatische selectie altijd overgeslagen.
 
@@ -292,9 +342,10 @@ Overige kolommen worden genegeerd.
 
 | Situatie | Gedrag |
 |---|---|
-| Geen xlsx-bestand gevonden | Terminating error met duidelijke melding |
+| Geen xlsx- of csv-bestand gevonden | Terminating error met duidelijke melding |
 | Leeg Excel-bestand | Terminating error |
 | Vereiste kolommen ontbreken | Terminating error met naam van ontbrekende kolom(men) |
+| Onbekend kolomformaat in vergelijking | Warning per rij, rij overgeslagen |
 | Ongeldig jaar opgegeven | Terminating error |
 | Ongeldige geboortedatum | Warning per deelnemer, deelnemer overgeslagen |
 | ImportExcel kan niet worden geïnstalleerd | Terminating error |

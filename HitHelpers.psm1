@@ -394,6 +394,83 @@ function ConvertFrom-HitBirthDate {
     return $null
 }
 
+function Select-HitFilePath {
+    <#
+        .SYNOPSIS
+        Toont een keuzemenu voor het selecteren van een xlsx- of csv-bestand.
+
+        .DESCRIPTION
+        Zoekt naar alle *.xlsx- en *.csv-bestanden in ScriptDir, exclusief bestanden
+        die beginnen met 'Deelnemerslijst_'. Bij één treffer wordt automatisch geselecteerd;
+        bij meerdere treffers verschijnt een genummerd console-keuzemenu.
+        Genereert een afbrekende fout als er geen bestanden worden gevonden.
+
+        .PARAMETER Prompt
+        De omschrijving die boven het keuzemenu wordt weergegeven, bijvoorbeeld
+        'Kies deelnemerslijst 1 (vorig jaar)'.
+
+        .PARAMETER ScriptDir
+        De map waarin naar xlsx- en csv-bestanden gezocht wordt.
+
+        .OUTPUTS
+        System.String -- Het absolute pad naar het geselecteerde bestand.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Prompt,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ScriptDir
+    )
+
+    $candidateFiles = @(
+        Get-ChildItem -Path $ScriptDir -File |
+            Where-Object { $_.Extension -in @('.xlsx', '.csv') -and $_.Name -notlike 'Deelnemerslijst_*' } |
+            Sort-Object Name
+    )
+
+    if ($candidateFiles.Count -eq 0) {
+        $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+            [System.IO.FileNotFoundException]::new("Geen xlsx- of csv-bestanden gevonden in: $ScriptDir"),
+            'NoDataFilesFound',
+            [System.Management.Automation.ErrorCategory]::ObjectNotFound,
+            $ScriptDir
+        )
+        $PSCmdlet.ThrowTerminatingError($errorRecord)
+    }
+
+    if ($candidateFiles.Count -eq 1) {
+        Write-Verbose "Automatisch geselecteerd: $($candidateFiles[0].Name)"
+        return $candidateFiles[0].FullName
+    }
+
+    Write-Host ''
+    Write-Host "${Prompt}:" -ForegroundColor Cyan
+    Write-Host ''
+    for ($i = 0; $i -lt $candidateFiles.Count; $i++) {
+        Write-Host "  [$($i + 1)] $($candidateFiles[$i].Name)" -ForegroundColor White
+    }
+    Write-Host ''
+
+    $selectedPath = $null
+    $validChoice  = $false
+    while (-not $validChoice) {
+        $choiceInput  = Read-Host "Kies een bestand (1-$($candidateFiles.Count))"
+        $choiceNumber = 0
+        if ([int]::TryParse($choiceInput, [ref]$choiceNumber) -and
+            $choiceNumber -ge 1 -and $choiceNumber -le $candidateFiles.Count) {
+            $selectedPath = $candidateFiles[$choiceNumber - 1].FullName
+            $validChoice  = $true
+        }
+        else {
+            Write-Host "Ongeldige keuze. Voer een nummer in van 1 t/m $($candidateFiles.Count)." -ForegroundColor Yellow
+        }
+    }
+    Write-Verbose "Geselecteerd: $selectedPath"
+    return $selectedPath
+}
+
 function Get-HitOutputBaseName {
     <#
         .SYNOPSIS
@@ -430,6 +507,7 @@ Export-ModuleMember -Function @(
     'Get-DutchGroupSizeLabel',
     'Assert-HitImportExcel',
     'Resolve-HitExcelPath',
+    'Select-HitFilePath',
     'ConvertFrom-HitBirthDate',
     'Get-HitOutputBaseName'
 )

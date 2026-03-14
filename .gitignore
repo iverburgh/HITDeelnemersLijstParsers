@@ -1,2 +1,3 @@
-# Excel-bestanden met deelnemersgegevens
+# Excel of CSV-bestanden met deelnemersgegevens
 *.xlsx
+*.csv
