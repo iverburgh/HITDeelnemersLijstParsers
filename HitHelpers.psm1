@@ -412,6 +412,10 @@ function Select-HitFilePath {
         .PARAMETER ScriptDir
         De map waarin naar xlsx- en csv-bestanden gezocht wordt.
 
+        .PARAMETER ExcludePaths
+        Optionele lijst van volledige bestandspaden die uitgesloten worden van de selectie.
+        Handig om een eerder geselecteerd bestand te verbergen bij een tweede keuze.
+
         .OUTPUTS
         System.String -- Het absolute pad naar het geselecteerde bestand.
     #>
@@ -421,12 +425,19 @@ function Select-HitFilePath {
         [string]$Prompt,
 
         [Parameter(Mandatory = $true)]
-        [string]$ScriptDir
+        [string]$ScriptDir,
+
+        [Parameter()]
+        [string[]]$ExcludePaths = @()
     )
 
     $candidateFiles = @(
         Get-ChildItem -Path $ScriptDir -File |
-            Where-Object { $_.Extension -in @('.xlsx', '.csv') -and $_.Name -notlike 'Deelnemerslijst_*' } |
+            Where-Object {
+                $_.Extension -in @('.xlsx', '.csv') -and
+                $_.Name -notlike 'Deelnemerslijst_*' -and
+                $_.FullName -notin $ExcludePaths
+            } |
             Sort-Object Name
     )
 

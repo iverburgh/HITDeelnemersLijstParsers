@@ -10,6 +10,7 @@ PowerShell-scriptsuite voor het verwerken van HIT-deelnemerslijsten (Scouting Ne
 | `Export-HitBijzonderheden.ps1` | Exporteert een Excel-lijst met alleen deelnemers met dieet of aandachtspunten |
 | `Export-HitContactgegevens.ps1` | Exporteert een Excel-lijst met contactgegevens van alle deelnemers |
 | `Compare-HitDeelnemerslijst.ps1` | Vergelijkt twee deelnemerslijsten op naam en geboortedatum (terugkerende deelnemers) |
+| `GenerateBootIndelingBaseData.ps1` | Genereert een Excel-basisbestand voor de bootindeling, gecombineerd uit het deelnemersbestand en de Google Forms-export |
 | `Mail01-3_Weken_voor_Goede_Vrijdag.ps1` | Genereert een kopieerklare e-mail (BCC, onderwerp, body) voor de 'Het is bijna zover!'-mailing |
 | `Mail02-1_Dag_voor_Merchandise_Deadline.ps1` | Genereert een kopieerklare herinneringsmail over de aankomende merchandise-besteldatum |
 | `Mail03-1_Week_voor_Goede_Vrijdag.ps1` | Genereert een kopieerklare e-mail voor 1 week vóór het kamp, met automatisch opgehaalde weersvoorspelling |
@@ -245,9 +246,59 @@ Het script berekent en haalt automatisch op:
 
 ---
 
+## GenerateBootIndelingBaseData.ps1
+
+Combineert het deelnemersbestand (xlsx of puntkomma-gescheiden csv) met een Google Forms-export (komma-gescheiden csv) en genereert een Excel-bestand als basismateriaal voor de bootindeling.
+
+De gebruiker kiest interactief:
+1. **Het deelnemersbestand** — xlsx of csv met alle ingeschreven deelnemers
+2. **De Google Forms-export** — csv met de antwoorden op de pré-kampformulier
+
+Kolommen in het outputbestand:
+
+| Kolom | Bron | Beschrijving |
+|---|---|---|
+| `Naam` | Deelnemersbestand | Voornaam; als meerdere deelnemers dezelfde voornaam hebben ook de achternaam |
+| `Leeftijd` | Deelnemersbestand | Leeftijd op de startdag van het kamp; `14/15` als de deelnemer jarig is tijdens het kamp |
+| `Geslacht` | Deelnemersbestand | Geslacht van de deelnemer |
+| `Groep` | Deelnemersbestand | Subgroep van de deelnemer |
+| `Zeilen met je groep?` | Google Forms | Afgeleid van de bezwaar-vraag: bezwaar=Ja → `Ja` (wil met groep), bezwaar=Nee → `Nee` |
+| `Zeilervaring` | Google Forms | Antwoord op de zeilervaring-vraag |
+| `Eigen reddingsvest?` | Google Forms | `Ja` of `Nee`, genormaliseerd vanuit het formulier |
+| `Gewicht (kg)` | Google Forms | Opgegeven gewicht (nodig bij huur reddingsvest) |
+| `Emailadres` | Deelnemersbestand | E-mailadres van de deelnemer |
+
+- Rijen worden gesorteerd op **Groep**, daarbinnen op **Naam**.
+- Deelnemers die het formulier **niet** hebben ingevuld worden **rood gemarkeerd** (RGB 255, 199, 206).
+- Google Forms-kolommen worden herkend via **substring-match** op de kolomnaam, zodat kleine tekstverschillen in formuliervragen geen breuk veroorzaken.
+- Namen worden vergeleken via **fuzzy matching** (standaard: 85% gelijkenis). Zo wordt bijv. `"Yvonne's van Buuren"` (formulier) automatisch gematcht op `"Yvonne van Buuren"` (deelnemersbestand). Fuzzy matches worden als informatieve melding op de console getoond.
+
+Outputbestandsnaam: `Deelnemerslijst_[naam]_[jaar]_BootIndeling.xlsx`
+
+### Gebruik
+
+```powershell
+.\GenerateBootIndelingBaseData.ps1
+.\GenerateBootIndelingBaseData.ps1 -Year 2026
+.\GenerateBootIndelingBaseData.ps1 -MatchThreshold 0.90
+.\GenerateBootIndelingBaseData.ps1 -Verbose
+```
+
+### Parameters
+
+| Parameter | Verplicht | Standaard | Beschrijving |
+|---|---|---|---|
+| `-Year` | Nee | Huidig jaar | Jaar van het HIT-kamp (paasdatum + leeftijdsberekening) |
+| `-MatchThreshold` | Nee | `0.85` | Minimale naamsovereenkomst (0.0–1.0) voor fuzzy matching. Verlaag bij veel schrijfvarianten, verhoog bij risico op verkeerde koppelingen |
+| `-Verbose` | Nee | — | Toont gedetailleerde voortgangsberichten, inclusief alle fuzzy matches |
+
+---
+
 ## Compare-HitDeelnemerslijst.ps1
 
-Vergelijkt twee deelnemerslijsten (xlsx of csv) en zoekt naar deelnemers die in beide jaren voorkomen, op basis van **volledige naam** en **geboortedatum**.
+Vergelijkt twee deelnemerslijsten (xlsx of csv) op **volledige naam** en **geboortedatum** en toont welke deelnemers in beide lijsten voorkomen. Handig om terugkerende deelnemers te identificeren ten opzichte van een vorig jaar.
+
+Er wordt geen outputbestand aangemaakt — de resultaten worden alleen op de console weergegeven.
 
 De gebruiker kiest interactief via een console-keuzemenu:
 1. **Deelnemerslijst 1** — de lijst van het voorgaande jaar
@@ -282,13 +333,15 @@ Beide bestanden mogen elk afzonderlijk `.xlsx` of `.csv` zijn. Kolommen worden a
 | Raw CSV (puntkomma) | `Lid voornaam` | `Lid tussenvoegsel` | `Lid achternaam` | `Lid geboortedatum` |
 | Excel (hernoemde headers) | `Voornaam` | `Tussenvoegsel` (optioneel) | `Achternaam` | `Geboortedatum` |
 
+Rijen met een onbekend kolomformaat worden overgeslagen met een waarschuwing.
+
 ### Gebruik
 
 ```powershell
 .\Compare-HitDeelnemerslijst.ps1
 ```
 
-Geen parameters — al het interactieve verloopt via console-prompts.
+Geen parameters — de bestandskeuze verloopt volledig via interactieve console-prompts.
 
 ---
 
@@ -302,7 +355,9 @@ Alle scripts zoeken automatisch naar het invoerbestand in dezelfde map als het s
 2. Als geen `*-alles.xlsx` gevonden: zoek op `*.xlsx` (exclusief eerder gegenereerde `Deelnemerslijst_*`-bestanden), met dezelfde selectielogica
 3. Als ook dat niets oplevert → foutmelding
 
-`Compare-HitDeelnemerslijst.ps1` gebruikt een ruimere zoekopdracht: alle `*.xlsx`- en `*.csv`-bestanden in de scriptmap (exclusief `Deelnemerslijst_*`). De gebruiker kiest telkens interactief voor zowel lijst 1 als lijst 2.
+`Compare-HitDeelnemerslijst.ps1` en `GenerateBootIndelingBaseData.ps1` gebruiken een ruimere zoekopdracht: alle `*.xlsx`- en `*.csv`-bestanden in de scriptmap (exclusief `Deelnemerslijst_*`). De gebruiker kiest telkens interactief.
+
+Bij `GenerateBootIndelingBaseData.ps1` wordt het **eerst gekozen bestand automatisch uitgesloten** uit de lijst bij de tweede keuze, zodat hetzelfde bestand niet dubbel geselecteerd kan worden.
 
 Gegenereerde outputbestanden (`Deelnemerslijst_*`) worden bij de automatische selectie altijd overgeslagen.
 
@@ -325,9 +380,29 @@ Alle scripts verwachten een `.xlsx`-bestand zoals geëxporteerd uit het Scouting
 | `Naam noodcontact` | Contactgegevens | Naam van de contactpersoon |
 | `Telefoonnummer noodcontact` | Contactgegevens | Telefoonnummer noodcontact |
 | `Mobiel` | Contactgegevens | Mobiel nummer van de deelnemer |
-| `Mailadres` | E-mailgenerator | E-mailadres van de deelnemer, gebruikt voor de BCC-lijst |
+| `Mailadres` | E-mailgenerator, Bootindeling | E-mailadres van de deelnemer, gebruikt voor de BCC-lijst en de bootindelingsexport |
+| `Subgroep` | Bootindeling | Subgroep van de deelnemer (kolom `Groep` in de output) |
 
 Overige kolommen worden genegeerd.
+
+---
+
+## HitHelpers.psm1
+
+Gedeelde module die automatisch wordt ingeladen door alle scripts. Bevat:
+
+| Functie | Beschrijving |
+|---|---|
+| `Get-EasterSunday` | Berekent Eerste Paasdag (Meeus/Jones/Butcher-algoritme) |
+| `Get-AgeAtDate` | Berekent leeftijd in jaren op een gegeven datum |
+| `Get-BirthdayDuringCamp` | Controleert of een geboortedatum valt binnen de kampperiode |
+| `Get-DutchMonthName` / `Get-DutchDayName` | Nederlandse dag- en maandnamen |
+| `Get-DutchGroupSizeLabel` | Nederlandse omschrijving voor groepsgrootte |
+| `Assert-HitImportExcel` | Installeert de ImportExcel-module automatisch als die ontbreekt |
+| `Resolve-HitExcelPath` | Zoekt automatisch het `*-alles.xlsx`-bestand op in de scriptmap |
+| `Select-HitFilePath` | Toont een interactief keuzemenu voor alle xlsx/csv-bestanden in de scriptmap. De optionele parameter `-ExcludePaths` sluit opgegeven paden uit van de lijst (gebruikt door `GenerateBootIndelingBaseData.ps1` om het al gekozen deelnemersbestand te verbergen bij de tweede keuze) |
+| `ConvertFrom-HitBirthDate` | Parseert geboortedatums in meerdere formaten naar `DateTime` |
+| `Get-HitOutputBaseName` | Genereert een schone basisnaam voor het outputbestand op basis van het inputpad |
 
 ---
 
@@ -348,6 +423,9 @@ Overige kolommen worden genegeerd.
 | Onbekend kolomformaat in vergelijking | Warning per rij, rij overgeslagen |
 | Ongeldig jaar opgegeven | Terminating error |
 | Ongeldige geboortedatum | Warning per deelnemer, deelnemer overgeslagen |
+| Google Forms-kolom niet gevonden (`voor- en achternaam`) | Terminating error met lijst van gevonden kolommen |
+| Formuliernaam niet exact of fuzzy te matchen | Deelnemer rood gemarkeerd in Excel; melding op console |
+| Formulierregel niet te koppelen aan deelnemer | Gele warning op console met regelnummer en naam |
 | ImportExcel kan niet worden geïnstalleerd | Terminating error |
 
 ---
