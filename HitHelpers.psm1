@@ -690,6 +690,245 @@ function ConvertTo-NormalizedParticipant {
     }
 }
 
+function Get-HitCampDates {
+    <#
+        .SYNOPSIS
+        Berekent de kampdatums voor een gegeven jaar op basis van Pasen.
+
+        .DESCRIPTION
+        Berekent Paaszondag en leidt daaruit af:
+        - CampStart: Goede Vrijdag (Paaszondag − 2 dagen)
+        - CampEnd:   Tweede Paasdag (Paaszondag + 1 dag)
+
+        .PARAMETER Year
+        Het jaar van het HIT-kamp.
+
+        .OUTPUTS
+        PSCustomObject met EasterSunday, CampStart, CampEnd (alle System.DateTime).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateRange(2000, 2099)]
+        [int]$Year
+    )
+
+    $easterSunday = Get-EasterSunday -Year $Year
+    $campStart    = $easterSunday.AddDays(-2)   # Goede Vrijdag
+    $campEnd      = $easterSunday.AddDays(1)    # Tweede Paasdag
+
+    Write-Verbose ("Kamp {0}: Goede Vrijdag {1:dd-MM-yyyy} t/m Tweede Paasdag {2:dd-MM-yyyy}" -f $Year, $campStart, $campEnd)
+
+    return [PSCustomObject]@{
+        EasterSunday = $easterSunday
+        CampStart    = $campStart
+        CampEnd      = $campEnd
+    }
+}
+
+function Get-HitMerchandiseDeadline {
+    <#
+        .SYNOPSIS
+        Berekent de uiterste besteldatum voor merchandise: donderdag 22:00, twee weken vóór het kamp.
+
+        .DESCRIPTION
+        Gaat terug vanuit (CampStart − 14 dagen) naar de laatste donderdag op of vóór die datum,
+        en stelt de tijd in op 22:00.
+
+        .PARAMETER CampStart
+        De eerste dag van het kamp (Goede Vrijdag).
+
+        .OUTPUTS
+        PSCustomObject met DateTime, DayName (NL), MonthName (NL), Formatted, Time.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [datetime]$CampStart
+    )
+
+    $rawDeadline    = $CampStart.AddDays(-14)
+    $dayOfWeekValue = [int]$rawDeadline.DayOfWeek      # Sunday=0 ... Thursday=4 ... Saturday=6
+    $daysToSubtract = ($dayOfWeekValue - 4 + 7) % 7    # stappen terug naar de dichtstbijzijnde of huidige donderdag
+    $deadlineDate   = $rawDeadline.AddDays(-$daysToSubtract)
+
+    $deadlineDateTime = [datetime]::new(
+        $deadlineDate.Year, $deadlineDate.Month, $deadlineDate.Day, 22, 0, 0
+    )
+
+    $dayName   = Get-DutchDayName   -DayOfWeek ([int]$deadlineDateTime.DayOfWeek)
+    $monthName = Get-DutchMonthName -Month $deadlineDateTime.Month
+    $formatted = "$dayName $($deadlineDateTime.Day) $monthName"
+    $time      = $deadlineDateTime.ToString('HH:mm')
+
+    Write-Verbose "Merchandise-deadline: $formatted om $time"
+
+    return [PSCustomObject]@{
+        DateTime  = $deadlineDateTime
+        DayName   = $dayName
+        MonthName = $monthName
+        Formatted = $formatted
+        Time      = $time
+    }
+}
+
+function Import-HitMailData {
+    <#
+        .SYNOPSIS
+        Importeert Excel-data voor een mailscript en bouwt de BCC-lijst op.
+
+        .DESCRIPTION
+        Laadt het Excel-bestand, leest de kampnaam uit de 'Kamp'-kolom (fallback: 'HIT-kamp')
+        en bouwt een BCC-string op uit de opgegeven e-mailkolom.
+        Genereert een afbrekende fout als het bestand leeg is.
+        Vereist dat ImportExcel al geladen is (roep eerst Assert-HitImportExcel aan).
+
+        .PARAMETER Path
+        Het volledige pad naar het te importeren Excel-bestand (.xlsx).
+
+        .PARAMETER EmailKolom
+        De naam van de kolom die de e-mailadressen bevat.
+
+        .OUTPUTS
+        PSCustomObject met KampNaam (string), BccString (string), AllRows (object[]), ActualColumns (string[]).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$EmailKolom
+    )
+
+    Write-Verbose 'Inlezen van Excel-bestand...'
+    $allRows = @(Import-Excel -Path $Path -ErrorAction Stop)
+
+    if ($allRows.Count -eq 0) {
+        $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+            [System.InvalidOperationException]::new('Het Excel-bestand bevat geen gegevensrijen.'),
+            'ExcelEmpty',
+            [System.Management.Automation.ErrorCategory]::InvalidData,
+            $Path
+        )
+        $PSCmdlet.ThrowTerminatingError($errorRecord)
+    }
+
+    Write-Verbose "Ingelezen: $($allRows.Count) rij(en)."
+    $actualColumns = [string[]]$allRows[0].PSObject.Properties.Name
+
+    # Kampnaam
+    if ('Kamp' -in $actualColumns) {
+        $kampNaam = [string]($allRows | Select-Object -First 1).Kamp
+        Write-Verbose "Kampnaam: $kampNaam"
+    }
+    else {
+        Write-Warning "Kolom 'Kamp' niet gevonden in het Excel-bestand. Kampnaam ingesteld op 'HIT-kamp'."
+        $kampNaam = 'HIT-kamp'
+    }
+
+    # BCC
+    if ($EmailKolom -notin $actualColumns) {
+        Write-Warning (
+            "Kolom '$EmailKolom' niet gevonden in het Excel-bestand. BCC-lijst is leeg. " +
+            "Beschikbare kolommen: $($actualColumns -join ', ')"
+        )
+        $bccAddresses = @()
+    }
+    else {
+        $bccAddresses = @(
+            $allRows |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_."$EmailKolom") } |
+                Select-Object -ExpandProperty $EmailKolom |
+                Sort-Object -Unique
+        )
+    }
+
+    $bccString = $bccAddresses -join ', '
+    Write-Verbose "$($bccAddresses.Count) e-mailadres(sen) gevonden voor BCC."
+
+    return [PSCustomObject]@{
+        KampNaam      = $kampNaam
+        BccString     = $bccString
+        AllRows       = $allRows
+        ActualColumns = $actualColumns
+    }
+}
+
+function Write-HitMailOutput {
+    <#
+        .SYNOPSIS
+        Schrijft de gestandaardiseerde console-output voor een HIT-mailscript.
+
+        .DESCRIPTION
+        Toont een deadline-waarschuwing, gevolgd door de BCC-, ONDERWERP- en EMAIL BODY-secties.
+        Optioneel kunnen extra waarschuwingen worden meegegeven (bijv. over een niet-opgehaalde
+        weersvoorspelling).
+
+        .PARAMETER BccString
+        De BCC-string met e-mailadressen, gescheiden door ', '.
+
+        .PARAMETER Subject
+        Het e-mailonderwerp.
+
+        .PARAMETER Body
+        De e-mailbody.
+
+        .PARAMETER MailDeadlineFormatted
+        De geformatteerde uiterste verzenddatum (bijv. 'vrijdag 3 april 2026').
+
+        .PARAMETER ExtraWarnings
+        Optionele lijst van extra waarschuwingsteksten die onder de deadline-header worden getoond.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BccString,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Subject,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Body,
+
+        [Parameter(Mandatory = $true)]
+        [string]$MailDeadlineFormatted,
+
+        [Parameter()]
+        [string[]]$ExtraWarnings = @()
+    )
+
+    $separator = '=' * 60
+
+    Write-Host ''
+    Write-Host ('!' * 60) -ForegroundColor Yellow
+    Write-Host "  Verstuur deze mail uiterlijk op $MailDeadlineFormatted" -ForegroundColor Yellow -BackgroundColor DarkRed
+    Write-Host ('!' * 60) -ForegroundColor Yellow
+
+    foreach ($warning in $ExtraWarnings) {
+        Write-Host ''
+        Write-Host "  LET OP: $warning" -ForegroundColor Red
+    }
+
+    Write-Host ''
+    Write-Host $separator -ForegroundColor Cyan
+    Write-Host '  BCC' -ForegroundColor Cyan
+    Write-Host $separator -ForegroundColor Cyan
+    Write-Host $BccString
+
+    Write-Host ''
+    Write-Host $separator -ForegroundColor Cyan
+    Write-Host '  ONDERWERP' -ForegroundColor Cyan
+    Write-Host $separator -ForegroundColor Cyan
+    Write-Host $Subject
+
+    Write-Host ''
+    Write-Host $separator -ForegroundColor Cyan
+    Write-Host '  EMAIL BODY' -ForegroundColor Cyan
+    Write-Host $separator -ForegroundColor Cyan
+    Write-Host $Body
+}
+
 Export-ModuleMember -Function @(
     'Get-EasterSunday',
     'Get-AgeAtDate',
@@ -704,5 +943,9 @@ Export-ModuleMember -Function @(
     'ConvertFrom-HitBirthDate',
     'Get-HitOutputBaseName',
     'Import-ParticipantFile',
-    'ConvertTo-NormalizedParticipant'
+    'ConvertTo-NormalizedParticipant',
+    'Get-HitCampDates',
+    'Get-HitMerchandiseDeadline',
+    'Import-HitMailData',
+    'Write-HitMailOutput'
 )

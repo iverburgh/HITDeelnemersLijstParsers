@@ -168,11 +168,9 @@ Write-Verbose "Input-bestand: $resolvedInputPath"
 
 #region Camp Date Calculation
 
-$easterSunday = Get-EasterSunday -Year $Year
-$campStart    = $easterSunday.AddDays(-2)   # Goede Vrijdag
-$campEnd      = $easterSunday.AddDays(1)    # Tweede Paasdag
-
-Write-Verbose ("Kamp {0}: Goede Vrijdag {1:dd-MM-yyyy} t/m Tweede Paasdag {2:dd-MM-yyyy}" -f $Year, $campStart, $campEnd)
+$campDates = Get-HitCampDates -Year $Year
+$campStart  = $campDates.CampStart
+$campEnd    = $campDates.CampEnd
 
 #endregion Camp Date Calculation
 
@@ -278,57 +276,11 @@ else {
 
 #region Import Data
 
-Write-Verbose 'Inlezen van Excel-bestand...'
-$allRows   = Import-Excel -Path $resolvedInputPath -ErrorAction Stop
-$totalRows = ($allRows | Measure-Object).Count
-Write-Verbose "Ingelezen: $totalRows rij(en)."
-
-if ($totalRows -eq 0) {
-    $errorRecord = [System.Management.Automation.ErrorRecord]::new(
-        [System.InvalidOperationException]::new('Het Excel-bestand bevat geen gegevensrijen.'),
-        'ExcelEmpty',
-        [System.Management.Automation.ErrorCategory]::InvalidData,
-        $resolvedInputPath
-    )
-    $PSCmdlet.ThrowTerminatingError($errorRecord)
-}
-
-$actualColumns = $allRows[0].PSObject.Properties.Name
-
-# Kampnaam afleiden uit de 'Kamp'-kolom
-if ('Kamp' -in $actualColumns) {
-    $KampNaam = ($allRows | Select-Object -First 1).Kamp
-    Write-Verbose "Kampnaam: $KampNaam"
-}
-else {
-    Write-Warning "Kolom 'Kamp' niet gevonden in het Excel-bestand. Kampnaam ingesteld op 'HIT-kamp'."
-    $KampNaam = 'HIT-kamp'
-}
+$mailData  = Import-HitMailData -Path $resolvedInputPath -EmailKolom $EmailKolom
+$KampNaam  = $mailData.KampNaam
+$bccString = $mailData.BccString
 
 #endregion Import Data
-
-#region Build BCC
-
-if ($EmailKolom -notin $actualColumns) {
-    Write-Warning (
-        "Kolom '$EmailKolom' niet gevonden in het Excel-bestand. BCC-lijst is leeg. " +
-        "Beschikbare kolommen: $($actualColumns -join ', ')"
-    )
-    $bccAddresses = @()
-}
-else {
-    $bccAddresses = @(
-        $allRows |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_."$EmailKolom") } |
-            Select-Object -ExpandProperty $EmailKolom |
-            Sort-Object -Unique
-    )
-}
-
-$bccString = $bccAddresses -join ', '
-Write-Verbose "$($bccAddresses.Count) e-mailadres(sen) gevonden voor BCC."
-
-#endregion Build BCC
 
 #region Build Email
 
@@ -379,34 +331,16 @@ Groetjes van de $KampNaam staf
 
 #region Output
 
-$separator = '=' * 60
-
-Write-Host ''
-Write-Host ('!' * 60) -ForegroundColor Yellow
-Write-Host "  Verstuur deze mail uiterlijk op $mailDeadlineFormatted" -ForegroundColor Yellow -BackgroundColor DarkRed
-Write-Host ('!' * 60) -ForegroundColor Yellow
-
+$extraWarnings = @()
 if (-not $weatherFetched) {
-    Write-Host ''
-    Write-Host '  LET OP: weersvoorspelling niet opgehaald — pas de body handmatig aan!' -ForegroundColor Red
+    $extraWarnings += 'weersvoorspelling niet opgehaald — pas de body handmatig aan!'
 }
 
-Write-Host ''
-Write-Host $separator -ForegroundColor Cyan
-Write-Host '  BCC' -ForegroundColor Cyan
-Write-Host $separator -ForegroundColor Cyan
-Write-Host $bccString
-
-Write-Host ''
-Write-Host $separator -ForegroundColor Cyan
-Write-Host '  ONDERWERP' -ForegroundColor Cyan
-Write-Host $separator -ForegroundColor Cyan
-Write-Host $subject
-
-Write-Host ''
-Write-Host $separator -ForegroundColor Cyan
-Write-Host '  EMAIL BODY' -ForegroundColor Cyan
-Write-Host $separator -ForegroundColor Cyan
-Write-Host $body
+Write-HitMailOutput `
+    -BccString             $bccString `
+    -Subject               $subject `
+    -Body                  $body `
+    -MailDeadlineFormatted $mailDeadlineFormatted `
+    -ExtraWarnings         $extraWarnings
 
 #endregion Output

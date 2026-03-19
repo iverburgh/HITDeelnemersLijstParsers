@@ -77,27 +77,6 @@ $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }
 
 #region Helper Functions
 
-function Import-ParticipantFile {
-    <#
-        .SYNOPSIS
-        Laadt een xlsx- of puntkomma-gescheiden csv-bestand als array van rijen.
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Path
-    )
-
-    $extension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
-    switch ($extension) {
-        '.csv'  { return @(Import-Csv -Path $Path -Delimiter ';' -ErrorAction Stop) }
-        '.xlsx' { return @(Import-Excel -Path $Path -ErrorAction Stop) }
-        default {
-            throw "Niet-ondersteund bestandsformaat: $extension"
-        }
-    }
-}
-
 function Get-NormalizedName {
     <#
         .SYNOPSIS
@@ -236,11 +215,9 @@ Write-Verbose "Google Forms bestand: $formsPath"
 
 #region Camp Date Calculation
 
-$easterSunday = Get-EasterSunday -Year $Year
-$campStart    = $easterSunday.AddDays(-2)   # Goede Vrijdag
-$campEnd      = $easterSunday.AddDays(1)    # Tweede Paasdag
-
-Write-Verbose ("Kamp {0}: Goede Vrijdag {1:dd-MM-yyyy} t/m Tweede Paasdag {2:dd-MM-yyyy}" -f $Year, $campStart, $campEnd)
+$campDates = Get-HitCampDates -Year $Year
+$campStart  = $campDates.CampStart
+$campEnd    = $campDates.CampEnd
 
 #endregion Camp Date Calculation
 

@@ -79,11 +79,9 @@ Write-Verbose "Input-bestand: $resolvedInputPath"
 
 #region Camp Date Calculation
 
-$easterSunday = Get-EasterSunday -Year $Year
-$campStart    = $easterSunday.AddDays(-2)   # Goede Vrijdag
-$campEnd      = $easterSunday.AddDays(1)    # Tweede Paasdag
-
-Write-Verbose ("Kamp {0}: Goede Vrijdag {1:dd-MM-yyyy} t/m Tweede Paasdag {2:dd-MM-yyyy}" -f $Year, $campStart, $campEnd)
+$campDates = Get-HitCampDates -Year $Year
+$campStart  = $campDates.CampStart
+$campEnd    = $campDates.CampEnd
 
 #endregion Camp Date Calculation
 

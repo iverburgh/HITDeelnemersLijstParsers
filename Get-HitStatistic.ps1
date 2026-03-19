@@ -87,12 +87,12 @@ if (-not [string]::IsNullOrWhiteSpace($yearInput)) {
     }
 }
 
-$easterSunday = Get-EasterSunday -Year $Year
-$StartDate = $easterSunday.AddDays(-2)   # Goede Vrijdag
-$EndDate = $easterSunday.AddDays(1)       # Tweede Paasdag
+$campDates = Get-HitCampDates -Year $Year
+$StartDate = $campDates.CampStart
+$EndDate   = $campDates.CampEnd
 
 $startMonthName = Get-DutchMonthName -Month $StartDate.Month
-$endMonthName = Get-DutchMonthName -Month $EndDate.Month
+$endMonthName   = Get-DutchMonthName -Month $EndDate.Month
 
 Write-Host ''
 Write-Host "Goede Vrijdag:  $($StartDate.Day) $startMonthName $($StartDate.Year)" -ForegroundColor Green
@@ -235,32 +235,19 @@ $outputLines.Add('')
 $jarigen = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 foreach ($deelnemerAge in $ages) {
-    $birthDate = $deelnemerAge.Geboortedatum
+    $birthDate    = $deelnemerAge.Geboortedatum
+    $birthdayDate = Get-BirthdayDateDuringCamp -BirthDate $birthDate -CampStart $StartDate -CampEnd $EndDate
 
-    # Controleer verjaardag in elk jaar dat het kamp beslaat
-    $startYear = $StartDate.Year
-    $endYear = $EndDate.Year
+    if ($null -ne $birthdayDate) {
+        $newAge    = Get-AgeAtDate -BirthDate $birthDate -ReferenceDate $birthdayDate
+        $monthName = Get-DutchMonthName -Month $birthdayDate.Month
 
-    for ($checkYear = $startYear; $checkYear -le $endYear; $checkYear++) {
-        try {
-            # Behandel schrikkeljaar: 29 feb op een niet-schrikkelj. → niet jarig
-            $birthdayThisYear = [datetime]::new($checkYear, $birthDate.Month, $birthDate.Day)
-        }
-        catch {
-            continue
-        }
-
-        if ($birthdayThisYear.Date -ge $StartDate.Date -and $birthdayThisYear.Date -le $EndDate.Date) {
-            $newAge = Get-AgeAtDate -BirthDate $birthDate -ReferenceDate $birthdayThisYear
-            $monthName = Get-DutchMonthName -Month $birthdayThisYear.Month
-
-            $jarigen.Add([PSCustomObject]@{
-                Naam     = $deelnemerAge.Naam
-                Leeftijd = $newAge
-                Dag      = $birthdayThisYear.Day
-                Maand    = $monthName
-            })
-        }
+        $jarigen.Add([PSCustomObject]@{
+            Naam     = $deelnemerAge.Naam
+            Leeftijd = $newAge
+            Dag      = $birthdayDate.Day
+            Maand    = $monthName
+        })
     }
 }
 

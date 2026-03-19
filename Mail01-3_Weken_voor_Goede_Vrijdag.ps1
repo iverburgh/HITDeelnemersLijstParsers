@@ -119,32 +119,16 @@ Write-Verbose "Input-bestand: $resolvedInputPath"
 
 #region Camp Date Calculation
 
-$easterSunday = Get-EasterSunday -Year $Year
-$campStart    = $easterSunday.AddDays(-2)   # Goede Vrijdag
-
-Write-Verbose ("Kamp {0}: Goede Vrijdag {1:dd-MM-yyyy}" -f $Year, $campStart)
+$campDates = Get-HitCampDates -Year $Year
+$campStart  = $campDates.CampStart
 
 #endregion Camp Date Calculation
 
 #region Deadline Calculation
 
-# Uiterste besteldatum: donderdag 22:00, twee weken vóór aanvang kamp.
-# Ga terug vanuit (campStart - 14 dagen) naar de laatste donderdag op of vóór die datum.
-$rawDeadline     = $campStart.AddDays(-14)
-$dayOfWeekValue  = [int]$rawDeadline.DayOfWeek      # Sunday=0, Monday=1 ... Thursday=4 ... Saturday=6
-$daysToSubtract  = ($dayOfWeekValue - 4 + 7) % 7    # stappen terug naar de dichtstbijzijnde of huidige donderdag
-$deadlineDate    = $rawDeadline.AddDays(-$daysToSubtract)
-
-$deadlineDateTime = [datetime]::new(
-    $deadlineDate.Year, $deadlineDate.Month, $deadlineDate.Day, 22, 0, 0
-)
-
-$deadlineDayName   = Get-DutchDayName -DayOfWeek ([int]$deadlineDateTime.DayOfWeek)
-$deadlineMonthName = Get-DutchMonthName -Month $deadlineDateTime.Month
-$deadlineFormatted = "$deadlineDayName $($deadlineDateTime.Day) $deadlineMonthName"
-$deadlineTime      = $deadlineDateTime.ToString('HH:mm')
-
-Write-Verbose "Uiterste besteldatum: $deadlineFormatted om $deadlineTime"
+$merchandise       = Get-HitMerchandiseDeadline -CampStart $campStart
+$deadlineFormatted = $merchandise.Formatted
+$deadlineTime      = $merchandise.Time
 
 # Uiterste verzenddatum e-mail: 3 weken vóór aanvang kamp
 $mailDeadlineDate      = $campStart.AddDays(-21)
@@ -168,57 +152,11 @@ Write-Verbose "Dagen tot kamp: $([Math]::Round($daysUntilCamp)) | Weken tot kamp
 
 #region Import Data
 
-Write-Verbose 'Inlezen van Excel-bestand...'
-$allRows   = Import-Excel -Path $resolvedInputPath -ErrorAction Stop
-$totalRows = ($allRows | Measure-Object).Count
-Write-Verbose "Ingelezen: $totalRows rij(en)."
-
-if ($totalRows -eq 0) {
-    $errorRecord = [System.Management.Automation.ErrorRecord]::new(
-        [System.InvalidOperationException]::new('Het Excel-bestand bevat geen gegevensrijen.'),
-        'ExcelEmpty',
-        [System.Management.Automation.ErrorCategory]::InvalidData,
-        $resolvedInputPath
-    )
-    $PSCmdlet.ThrowTerminatingError($errorRecord)
-}
-
-$actualColumns = $allRows[0].PSObject.Properties.Name
-
-# Kampnaam afleiden uit de 'Kamp'-kolom
-if ('Kamp' -in $actualColumns) {
-    $KampNaam = ($allRows | Select-Object -First 1).Kamp
-    Write-Verbose "Kampnaam: $KampNaam"
-}
-else {
-    Write-Warning "Kolom 'Kamp' niet gevonden in het Excel-bestand. Kampnaam ingesteld op 'HIT-kamp'."
-    $KampNaam = 'HIT-kamp'
-}
+$mailData  = Import-HitMailData -Path $resolvedInputPath -EmailKolom $EmailKolom
+$KampNaam  = $mailData.KampNaam
+$bccString = $mailData.BccString
 
 #endregion Import Data
-
-#region Build BCC
-
-if ($EmailKolom -notin $actualColumns) {
-    Write-Warning (
-        "Kolom '$EmailKolom' niet gevonden in het Excel-bestand. BCC-lijst is leeg. " +
-        "Beschikbare kolommen: $($actualColumns -join ', ')"
-    )
-    $bccAddresses = @()
-}
-else {
-    $bccAddresses = @(
-        $allRows |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_."$EmailKolom") } |
-            Select-Object -ExpandProperty $EmailKolom |
-            Sort-Object -Unique
-    )
-}
-
-$bccString = $bccAddresses -join ', '
-Write-Verbose "$($bccAddresses.Count) e-mailadres(sen) gevonden voor BCC."
-
-#endregion Build BCC
 
 #region Build Email
 
@@ -266,29 +204,10 @@ HIT Heerenveen
 
 #region Output
 
-$separator = '=' * 60
-
-Write-Host ''
-Write-Host ('!' * 60) -ForegroundColor Yellow
-Write-Host "  Verstuur deze mail uiterlijk op $mailDeadlineFormatted" -ForegroundColor Yellow -BackgroundColor DarkRed
-Write-Host ('!' * 60) -ForegroundColor Yellow
-
-Write-Host ''
-Write-Host $separator -ForegroundColor Cyan
-Write-Host '  BCC' -ForegroundColor Cyan
-Write-Host $separator -ForegroundColor Cyan
-Write-Host $bccString
-
-Write-Host ''
-Write-Host $separator -ForegroundColor Cyan
-Write-Host '  ONDERWERP' -ForegroundColor Cyan
-Write-Host $separator -ForegroundColor Cyan
-Write-Host $subject
-
-Write-Host ''
-Write-Host $separator -ForegroundColor Cyan
-Write-Host '  EMAIL BODY' -ForegroundColor Cyan
-Write-Host $separator -ForegroundColor Cyan
-Write-Host $body
+Write-HitMailOutput `
+    -BccString             $bccString `
+    -Subject               $subject `
+    -Body                  $body `
+    -MailDeadlineFormatted $mailDeadlineFormatted
 
 #endregion Output
