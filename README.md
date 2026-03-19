@@ -9,8 +9,8 @@ PowerShell-scriptsuite voor het verwerken van HIT-deelnemerslijsten (Scouting Ne
 | `Get-HitStatistic.ps1` | Toont statistieken over de aanmeldingen als tekstrapport |
 | `Export-HitBijzonderheden.ps1` | Exporteert een Excel-lijst met alleen deelnemers met dieet of aandachtspunten |
 | `Export-HitContactgegevens.ps1` | Exporteert een Excel-lijst met contactgegevens van alle deelnemers |
-| `Compare-HitDeelnemerslijst.ps1` | Vergelijkt twee deelnemerslijsten op naam en geboortedatum (terugkerende deelnemers) |
 | `GenerateBootIndelingBaseData.ps1` | Genereert een Excel-basisbestand voor de bootindeling, gecombineerd uit het deelnemersbestand en de Google Forms-export |
+| `GenerateMerchandiseBestelling.ps1` | Toont een merchandise-bestellingsoverzicht (hoodies en t-shirts) voor HIT Sail Fryslân en Zeilzwerf Fryslân op de console |
 | `Mail01-3_Weken_voor_Goede_Vrijdag.ps1` | Genereert een kopieerklare e-mail (BCC, onderwerp, body) voor de 'Het is bijna zover!'-mailing |
 | `Mail02-1_Dag_voor_Merchandise_Deadline.ps1` | Genereert een kopieerklare herinneringsmail over de aankomende merchandise-besteldatum |
 | `Mail03-1_Week_voor_Goede_Vrijdag.ps1` | Genereert een kopieerklare e-mail voor 1 week vóór het kamp, met automatisch opgehaalde weersvoorspelling |
@@ -294,54 +294,34 @@ Outputbestandsnaam: `Deelnemerslijst_[naam]_[jaar]_BootIndeling.xlsx`
 
 ---
 
-## Compare-HitDeelnemerslijst.ps1
+## GenerateMerchandiseBestelling.ps1
 
-Vergelijkt twee deelnemerslijsten (xlsx of csv) op **volledige naam** en **geboortedatum** en toont welke deelnemers in beide lijsten voorkomen. Handig om terugkerende deelnemers te identificeren ten opzichte van een vorig jaar.
+Genereert een merchandise-bestellingsoverzicht voor **HIT Sail Fryslân** en **Zeilzwerf Fryslân**, gebaseerd op twee Google Forms-exportbestanden (csv).
 
-Er wordt geen outputbestand aangemaakt — de resultaten worden alleen op de console weergegeven.
+De gebruiker kiest interactief:
+1. **Het CSV-bestand voor HIT Sail Fryslân** — export uit het merchandise-formulier
+2. **Het CSV-bestand voor Zeilzwerf Fryslân** — export uit het merchandise-formulier
 
-De gebruiker kiest interactief via een console-keuzemenu:
-1. **Deelnemerslijst 1** — de lijst van het voorgaande jaar
-2. **Deelnemerslijst 2** — de lijst van het huidige jaar
+Per evenement worden hoodies en t-shirts gegroepeerd op itemtype (Hoodie → T-shirt) en maat (XS → XXXL) en afgedrukt op de console, met voor elk item de voornamen van de bestellers.
 
-De output toont het aantal deelnemers per lijst en een tabel met de overeenkomende deelnemers (naam + geboortedatum).
+Er wordt geen outputbestand aangemaakt — de output verschijnt alleen op de console.
 
-```
-══════════════════════════════════════════════════
-  Resultaat
-══════════════════════════════════════════════════
+### Verwacht CSV-formaat
 
-Deelnemerslijst 1: 25 deelnemer(s)
-  D:\...\Zeilzwerf_2025-alles.xlsx
-Deelnemerslijst 2: 28 deelnemer(s)
-  D:\...\Zeilzwerf_2026-alles.xlsx
-
-In deelnemerslijst 2 staan 7 deelnemer(s) die ook in deelnemerslijst 1 staan:
-
-VolledigeNaam      Geboortedatum
--------------      -------------
-Jan de Vries       13-06-2008
-...
-```
-
-### Ondersteunde bestandsformaten
-
-Beide bestanden mogen elk afzonderlijk `.xlsx` of `.csv` zijn. Kolommen worden automatisch gedetecteerd:
-
-| Formaat | Voornaam | Tussenvoegsel | Achternaam | Geboortedatum |
-|---|---|---|---|---|
-| Raw CSV (puntkomma) | `Lid voornaam` | `Lid tussenvoegsel` | `Lid achternaam` | `Lid geboortedatum` |
-| Excel (hernoemde headers) | `Voornaam` | `Tussenvoegsel` (optioneel) | `Achternaam` | `Geboortedatum` |
-
-Rijen met een onbekend kolomformaat worden overgeslagen met een waarschuwing.
+| Kolom | Beschrijving |
+|---|---|
+| `Wat is je voor- en achternaam?` | Volledige naam van de besteller |
+| `Hoodie € 39,95` | Gekozen hoodie-maat (bijv. `M`, `XL`), leeg als niet besteld |
+| `T-shirt € 39,95` | Gekozen t-shirt-maat (bijv. `S`, `L`), leeg als niet besteld |
 
 ### Gebruik
 
 ```powershell
-.\Compare-HitDeelnemerslijst.ps1
+.\GenerateMerchandiseBestelling.ps1
+.\GenerateMerchandiseBestelling.ps1 -Verbose
 ```
 
-Geen parameters — de bestandskeuze verloopt volledig via interactieve console-prompts.
+Geen bestandsparameters — de CSV-selectie verloopt volledig via interactieve console-prompts.
 
 ---
 
@@ -355,9 +335,9 @@ Alle scripts zoeken automatisch naar het invoerbestand in dezelfde map als het s
 2. Als geen `*-alles.xlsx` gevonden: zoek op `*.xlsx` (exclusief eerder gegenereerde `Deelnemerslijst_*`-bestanden), met dezelfde selectielogica
 3. Als ook dat niets oplevert → foutmelding
 
-`Compare-HitDeelnemerslijst.ps1` en `GenerateBootIndelingBaseData.ps1` gebruiken een ruimere zoekopdracht: alle `*.xlsx`- en `*.csv`-bestanden in de scriptmap (exclusief `Deelnemerslijst_*`). De gebruiker kiest telkens interactief.
+`GenerateBootIndelingBaseData.ps1` en `GenerateMerchandiseBestelling.ps1` gebruiken een ruimere zoekopdracht: alle `*.xlsx`- en `*.csv`-bestanden in de scriptmap (exclusief `Deelnemerslijst_*`). De gebruiker kiest telkens interactief.
 
-Bij `GenerateBootIndelingBaseData.ps1` wordt het **eerst gekozen bestand automatisch uitgesloten** uit de lijst bij de tweede keuze, zodat hetzelfde bestand niet dubbel geselecteerd kan worden.
+Bij `GenerateBootIndelingBaseData.ps1` en `GenerateMerchandiseBestelling.ps1` wordt het **eerst gekozen bestand automatisch uitgesloten** uit de lijst bij de tweede keuze, zodat hetzelfde bestand niet dubbel geselecteerd kan worden.
 
 Gegenereerde outputbestanden (`Deelnemerslijst_*`) worden bij de automatische selectie altijd overgeslagen.
 
@@ -396,13 +376,16 @@ Gedeelde module die automatisch wordt ingeladen door alle scripts. Bevat:
 | `Get-EasterSunday` | Berekent Eerste Paasdag (Meeus/Jones/Butcher-algoritme) |
 | `Get-AgeAtDate` | Berekent leeftijd in jaren op een gegeven datum |
 | `Get-BirthdayDuringCamp` | Controleert of een geboortedatum valt binnen de kampperiode |
+| `Get-BirthdayDateDuringCamp` | Geeft de concrete datum terug waarop een persoon jarig is tijdens het kamp (`$null` als niet van toepassing) |
 | `Get-DutchMonthName` / `Get-DutchDayName` | Nederlandse dag- en maandnamen |
 | `Get-DutchGroupSizeLabel` | Nederlandse omschrijving voor groepsgrootte |
 | `Assert-HitImportExcel` | Installeert de ImportExcel-module automatisch als die ontbreekt |
 | `Resolve-HitExcelPath` | Zoekt automatisch het `*-alles.xlsx`-bestand op in de scriptmap |
-| `Select-HitFilePath` | Toont een interactief keuzemenu voor alle xlsx/csv-bestanden in de scriptmap. De optionele parameter `-ExcludePaths` sluit opgegeven paden uit van de lijst (gebruikt door `GenerateBootIndelingBaseData.ps1` om het al gekozen deelnemersbestand te verbergen bij de tweede keuze) |
+| `Select-HitFilePath` | Toont een interactief keuzemenu voor alle xlsx/csv-bestanden in de scriptmap. De optionele parameter `-ExcludePaths` sluit opgegeven paden uit van de lijst (gebruikt door `GenerateBootIndelingBaseData.ps1` en `GenerateMerchandiseBestelling.ps1` om het al gekozen bestand te verbergen bij de tweede keuze). Met `-AllowSkip` verschijnt optie `[0] Overslaan` en retourneert het menu `$null` |
 | `ConvertFrom-HitBirthDate` | Parseert geboortedatums in meerdere formaten naar `DateTime` |
 | `Get-HitOutputBaseName` | Genereert een schone basisnaam voor het outputbestand op basis van het inputpad |
+| `Import-ParticipantFile` | Importeert een deelnemersbestand (xlsx of csv) en retourneert de rijen |
+| `ConvertTo-NormalizedParticipant` | Normaliseert een rij uit een deelnemersbestand naar een gestandaardiseerd object met `Sleutel`, `VolledigeNaam` en `Geboortedatum` |
 
 ---
 
