@@ -1,14 +1,14 @@
 <#
     .SYNOPSIS
-    Toont statistieken over HIT-aanmeldingen uit een Excel-bestand.
+    Toont statistieken over HIT-aanmeldingen en vergelijkt met het vorig jaar.
 
     .DESCRIPTION
-    Leest een HIT-aanmeldingen Excel-bestand (.xlsx, zoals geëxporteerd uit het
-    Scouting-aanmeldingssysteem) en toont een samenvatting met:
+    Leest twee HIT-aanmeldingenbestanden (huidig jaar en vorig jaar) en toont een samenvatting met:
     - Geslachtsverdeling (dames/heren)
     - Subgroep-analyse (groepsgrootte-verdeling)
     - Leeftijdsverdeling op de startdatum van het kamp
     - Jarigen-check tijdens het kamp
+    - Terugkerende deelnemers (ook aanwezig in de vorigjaarlijst)
 
     De kampdatums worden automatisch berekend aan de hand van Pasen:
     - Startdatum = Goede Vrijdag (Paaszondag − 2 dagen)
@@ -16,6 +16,7 @@
 
     De gebruiker geeft alleen het jaar op (standaard: huidig jaar) en bevestigt
     interactief. Het script berekent de juiste Paasdatums via het Computus-algoritme.
+    Beide bestanden worden geselecteerd via een interactief keuzemenu.
 
     .PARAMETER Year
     Het jaar van het HIT-kamp. Standaard het huidige jaar.
@@ -25,7 +26,7 @@
     .\Get-HitStatistic.ps1
 
     Start het script met het huidige jaar. De gebruiker bevestigt het jaar met ENTER.
-    Het Excel-bestand wordt automatisch geselecteerd of via een keuzemenu gekozen.
+    Beide bestanden (huidig en vorig jaar) worden geselecteerd via een keuzemenu.
 
     .EXAMPLE
     .\Get-HitStatistic.ps1 -Year 2025
@@ -39,13 +40,14 @@
 
     .OUTPUTS
     System.String
-    Een tekstrapport met statistieken over de aanmeldingen.
+    Een tekstrapport met statistieken over de aanmeldingen, inclusief terugkerende deelnemers.
 
     .NOTES
     Vereist: PowerShell 5.1+, ImportExcel-module.
     De module ImportExcel wordt automatisch geïnstalleerd als die nog niet aanwezig is
     (via Install-Module -Scope CurrentUser). Hiervoor is een internetverbinding nodig.
-    Excel-bestand moet de kolommen bevatten: Gender, Subgroep, Geboortedatum, Voornaam, Achternaam.
+    Huidigjaar-bestand moet de kolommen bevatten: Gender, Subgroep, Geboortedatum, Voornaam, Achternaam.
+    Vorigjaar-bestand ondersteunt Excel (.xlsx) én raw CSV (puntkommagescheiden, kolommen 'Lid voornaam' e.d.).
 
     Paasberekening: Anonymous Gregorian-algoritme (Meeus/Jones/Butcher).
 #>
@@ -63,6 +65,77 @@ Import-Module -Name (Join-Path -Path $_moduleRoot -ChildPath 'HitHelpers.psm1') 
 Remove-Variable -Name _moduleRoot
 
 #endregion Import Shared Module
+
+#region Local Helpers
+
+function Import-ParticipantFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $extension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+    switch ($extension) {
+        '.csv'  { return @(Import-Csv -Path $Path -Delimiter ';' -ErrorAction Stop) }
+        '.xlsx' { return @(Import-Excel -Path $Path -ErrorAction Stop) }
+        default {
+            $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                [System.ArgumentException]::new("Niet-ondersteund bestandsformaat: $extension"),
+                'UnsupportedFileFormat',
+                [System.Management.Automation.ErrorCategory]::InvalidArgument,
+                $Path
+            )
+            $PSCmdlet.ThrowTerminatingError($errorRecord)
+        }
+    }
+}
+
+function ConvertTo-NormalizedParticipant {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [psobject]$Row
+    )
+
+    $columnNames = $Row.PSObject.Properties.Name
+
+    if ($columnNames -contains 'Lid voornaam') {
+        $firstName    = [string]$Row.'Lid voornaam'
+        $insertion    = [string]$Row.'Lid tussenvoegsel'
+        $lastName     = [string]$Row.'Lid achternaam'
+        $rawBirthDate = $Row.'Lid geboortedatum'
+    }
+    elseif ($columnNames -contains 'Voornaam') {
+        $firstName    = [string]$Row.'Voornaam'
+        $insertion    = if ($columnNames -contains 'Tussenvoegsel') { [string]$Row.'Tussenvoegsel' } else { '' }
+        $lastName     = [string]$Row.'Achternaam'
+        $rawBirthDate = $Row.'Geboortedatum'
+    }
+    else {
+        Write-Warning "Onbekend kolomformaat — rij overgeslagen."
+        return $null
+    }
+
+    $nameParts = @($firstName, $insertion, $lastName) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $fullName  = ($nameParts -join ' ').Trim()
+
+    if ([string]::IsNullOrWhiteSpace($fullName)) {
+        return $null
+    }
+
+    $birthDate    = ConvertFrom-HitBirthDate -RawValue $rawBirthDate
+    $birthDateKey = if ($null -ne $birthDate) { $birthDate.ToString('yyyy-MM-dd') } else { '' }
+    $key          = "$($fullName.ToLowerInvariant())|$birthDateKey"
+
+    return [PSCustomObject]@{
+        Sleutel       = $key
+        VolledigeNaam = $fullName
+        Geboortedatum = $birthDate
+    }
+}
+
+#endregion Local Helpers
 
 #region Year Confirmation & Date Computation
 
@@ -101,14 +174,17 @@ Write-Verbose "Kampdatums: $($StartDate.ToString('yyyy-MM-dd')) t/m $($EndDate.T
 
 #endregion Year Confirmation & Date Computation
 
-#region Excel Selection
+#region Bestandsselectie
 
 Assert-HitImportExcel
 
 $scriptDirectory = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }
-$selectedExcelPath = Resolve-HitExcelPath -ScriptDir $scriptDirectory
 
-#endregion Excel Selection
+Write-Host ''
+$selectedExcelPath = Select-HitFilePath -Prompt 'Kies huidigjaar deelnemerslijst' -ScriptDir $scriptDirectory
+$vorigJaarPath     = Select-HitFilePath -Prompt 'Kies vorigjaar deelnemerslijst (ter vergelijking)' -ScriptDir $scriptDirectory -ExcludePaths @($selectedExcelPath)
+
+#endregion Bestandsselectie
 
 #region Excel Import & Validation
 
@@ -265,6 +341,45 @@ if ($jarigen.Count -eq 0) {
 else {
     foreach ($jarige in $jarigen) {
         $outputLines.Add("- $($jarige.Naam) wordt $($jarige.Leeftijd) op $($jarige.Dag) $($jarige.Maand)")
+    }
+}
+
+$outputLines.Add('')
+
+# --- Terugkerende deelnemers ---
+Write-Verbose "Vorigjaar-bestand laden: $vorigJaarPath"
+
+$vorigJaarRijen = Import-ParticipantFile -Path $vorigJaarPath
+$vorigJaarDeelnemers = @(
+    $vorigJaarRijen | ForEach-Object { ConvertTo-NormalizedParticipant -Row $_ } | Where-Object { $null -ne $_ }
+)
+
+Write-Verbose "$($vorigJaarDeelnemers.Count) deelnemers geladen uit vorigjaar-bestand."
+
+$vorigJaarLookup = @{}
+foreach ($vorigDeelnemer in $vorigJaarDeelnemers) {
+    $vorigJaarLookup[$vorigDeelnemer.Sleutel] = $true
+}
+
+$huidigJaarNormalized = @(
+    $deelnemers | ForEach-Object { ConvertTo-NormalizedParticipant -Row $_ } | Where-Object { $null -ne $_ }
+)
+
+$terugkerendeDeelnemers = @($huidigJaarNormalized | Where-Object { $vorigJaarLookup.ContainsKey($_.Sleutel) })
+
+if ($terugkerendeDeelnemers.Count -eq 0) {
+    $outputLines.Add('- geen deelnemers die vorig jaar ook deelnamen')
+}
+else {
+    $outputLines.Add("- $($terugkerendeDeelnemers.Count) deelnemer(s) waren er vorig jaar ook bij:")
+    foreach ($terugkerende in $terugkerendeDeelnemers) {
+        $geboortedatumTekst = if ($null -ne $terugkerende.Geboortedatum) {
+            $terugkerende.Geboortedatum.ToString('dd-MM-yyyy')
+        }
+        else {
+            '(onbekend)'
+        }
+        $outputLines.Add("  - $($terugkerende.VolledigeNaam) ($geboortedatumTekst)")
     }
 }
 
