@@ -5,7 +5,14 @@
     .DESCRIPTION
     Leest een HIT-registratie Excel-bestand (.xlsx, zoals geëxporteerd uit het
     Scouting-aanmeldingssysteem) en exporteert een nieuw Excel-bestand met de kolommen:
-    Voornaam, Achternaam, Geslacht, Geboortedatum, Contactpersoon, Noodnummer, Lid mobiel.
+    Voornaam, Achternaam, Geslacht, Geboortedatum, Contactpersoon, Noodnummer, Lid mobiel,
+    Bijzonderheden.
+
+    De Bijzonderheden-kolom bevat:
+    - De verjaardagsdatum (bijv. "zaterdag 3 april jarig (wordt 15)") als een deelnemer
+      jarig is tijdens het kamp (Goede Vrijdag t/m Tweede Paasdag).
+    - "Was er vorig jaar ook" als de deelnemer ook in een optioneel vorigjaar-bestand staat.
+    - Beide gecombineerd met " - " als allebei van toepassing zijn.
 
     Alle deelnemers worden opgenomen (geen filter).
 
@@ -19,8 +26,8 @@
     De module ImportExcel wordt automatisch geïnstalleerd als die nog niet aanwezig is.
 
     .PARAMETER Year
-    Het jaar dat wordt opgenomen in de bestandsnaam van het output-bestand.
-    Standaard: het huidige jaar.
+    Het jaar dat wordt opgenomen in de bestandsnaam van het output-bestand en wordt gebruikt
+    voor de kampdatumberekening (Bijzonderheden-kolom). Standaard: het huidige jaar.
 
     .EXAMPLE
     .\Export-HitContactgegevens.ps1
@@ -61,11 +68,51 @@ Remove-Variable -Name _moduleRoot
 Assert-HitImportExcel
 
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }
-$resolvedInputPath = Resolve-HitExcelPath -ScriptDir $scriptDir
+
+$resolvedInputPath = Select-HitFilePath `
+    -Prompt 'Kies huidigjaar deelnemerslijst' `
+    -ScriptDir $scriptDir
 
 Write-Verbose "Input-bestand: $resolvedInputPath"
 
 #endregion Initialisation
+
+#region Camp Date Calculation
+
+$easterSunday = Get-EasterSunday -Year $Year
+$campStart    = $easterSunday.AddDays(-2)   # Goede Vrijdag
+$campEnd      = $easterSunday.AddDays(1)    # Tweede Paasdag
+
+Write-Verbose ("Kamp {0}: Goede Vrijdag {1:dd-MM-yyyy} t/m Tweede Paasdag {2:dd-MM-yyyy}" -f $Year, $campStart, $campEnd)
+
+#endregion Camp Date Calculation
+
+#region Vorigjaar Selectie
+
+$vorigJaarPath = Select-HitFilePath `
+    -Prompt 'Kies vorigjaar-deelnemerslijst (0 of Enter = overslaan)' `
+    -ScriptDir $scriptDir `
+    -ExcludePaths @($resolvedInputPath) `
+    -AllowSkip
+
+if ($null -ne $vorigJaarPath) {
+    Write-Verbose "Vorigjaar-bestand: $vorigJaarPath"
+    $vorigJaarRijen      = Import-ParticipantFile -Path $vorigJaarPath
+    $vorigJaarDeelnemers = @(
+        $vorigJaarRijen | ForEach-Object { ConvertTo-NormalizedParticipant -Row $_ } | Where-Object { $null -ne $_ }
+    )
+    $vorigJaarLookup = @{}
+    foreach ($vd in $vorigJaarDeelnemers) {
+        $vorigJaarLookup[$vd.Sleutel] = $true
+    }
+    Write-Verbose "$($vorigJaarDeelnemers.Count) deelnemer(s) geladen uit vorigjaar-bestand."
+}
+else {
+    $vorigJaarLookup = $null
+    Write-Verbose 'Geen vorigjaar-bestand geselecteerd; vorig-jaar-check overgeslagen.'
+}
+
+#endregion Vorigjaar Selectie
 
 #region Import Data
 
@@ -110,7 +157,37 @@ foreach ($row in $allRows) {
         Write-Warning "Kon geboortedatum niet verwerken voor '$($row.Voornaam) $($row.Achternaam)': '$birthDateRaw'"
     }
 
+    # --- Bijzonderheden ---
+    $bijzonderhedenParts = [System.Collections.Generic.List[string]]::new()
+
+    # Verjaardag tijdens het kamp?
+    if ($null -ne $birthDate) {
+        $bdDate = Get-BirthdayDateDuringCamp -BirthDate $birthDate -CampStart $campStart -CampEnd $campEnd
+        if ($null -ne $bdDate) {
+            $dayName   = Get-DutchDayName   -DayOfWeek ([int]$bdDate.DayOfWeek)
+            $monthName = Get-DutchMonthName -Month $bdDate.Month
+            $newAge    = Get-AgeAtDate -BirthDate $birthDate -ReferenceDate $bdDate
+            $bijzonderhedenParts.Add("$dayName $($bdDate.Day) $monthName jarig (wordt $newAge)")
+        }
+    }
+
+    # Was er vorig jaar ook?
+    if ($null -ne $vorigJaarLookup) {
+        $normalized = ConvertTo-NormalizedParticipant -Row $row
+        if ($null -ne $normalized -and $vorigJaarLookup.ContainsKey($normalized.Sleutel)) {
+            $bijzonderhedenParts.Add('Was er vorig jaar ook')
+        }
+    }
+
+    $bijzonderheden = $bijzonderhedenParts -join ' - '
+
+    $groep = if ($actualColumns -contains 'Subgroep')     { [string]$row.'Subgroep' }
+             elseif ($actualColumns -contains 'Groep')    { [string]$row.'Groep' }
+             elseif ($actualColumns -contains 'Subgroepnaam') { [string]$row.'Subgroepnaam' }
+             else { '' }
+
     $outputRows.Add([PSCustomObject]@{
+        Groep           = $groep
         Voornaam        = $row.Voornaam
         Achternaam      = $row.Achternaam
         Geslacht        = $row.Gender
@@ -118,6 +195,7 @@ foreach ($row in $allRows) {
         Contactpersoon  = if ('Naam noodcontact' -in $actualColumns) { $row.'Naam noodcontact' } else { '' }
         Noodnummer      = if ('Telefoonnummer noodcontact' -in $actualColumns) { $row.'Telefoonnummer noodcontact' } else { '' }
         'Lid mobiel'    = if ('Mobiel' -in $actualColumns) { $row.Mobiel } else { '' }
+        Bijzonderheden  = $bijzonderheden
     })
 }
 

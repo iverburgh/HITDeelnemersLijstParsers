@@ -12,6 +12,9 @@
     - Excel-bestandsselectie met menu (Resolve-HitExcelPath)
     - Geboortedatum-parsing (ConvertFrom-HitBirthDate)
     - Schone outputnaam genereren (Get-HitOutputBaseName)
+    - Concrete verjaardagsdatum tijdens kamp (Get-BirthdayDateDuringCamp)
+    - Bestandsimport deelnemers (Import-ParticipantFile)
+    - Deelnemerrij normaliseren (ConvertTo-NormalizedParticipant)
 #>
 
 function Get-EasterSunday {
@@ -126,6 +129,56 @@ function Get-BirthdayDuringCamp {
         $current = $current.AddDays(1)
     }
     return $false
+}
+
+function Get-BirthdayDateDuringCamp {
+    <#
+        .SYNOPSIS
+        Geeft de concrete datum terug waarop een persoon jarig is tijdens het kamp.
+
+        .DESCRIPTION
+        Bepaalt of de verjaardag (dag en maand) van een persoon valt binnen de opgegeven
+        campperiode en retourneert de concrete datum. Houdt rekening met kampspans over
+        meerdere jaren en met 29-februariverjaardagen. Retourneert $null als de verjaardag
+        niet tijdens het kamp valt.
+
+        .PARAMETER BirthDate
+        De geboortedatum van de deelnemer.
+
+        .PARAMETER CampStart
+        De eerste dag van het kamp (inclusief).
+
+        .PARAMETER CampEnd
+        De laatste dag van het kamp (inclusief).
+
+        .OUTPUTS
+        System.DateTime of $null -- De concrete verjaardagsdatum tijdens het kamp, of $null.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [datetime]$BirthDate,
+
+        [Parameter(Mandatory = $true)]
+        [datetime]$CampStart,
+
+        [Parameter(Mandatory = $true)]
+        [datetime]$CampEnd
+    )
+
+    for ($checkYear = $CampStart.Year; $checkYear -le $CampEnd.Year; $checkYear++) {
+        try {
+            $birthdayThisYear = [datetime]::new($checkYear, $BirthDate.Month, $BirthDate.Day)
+        }
+        catch {
+            continue   # 29 feb op niet-schrikkeljaar
+        }
+
+        if ($birthdayThisYear.Date -ge $CampStart.Date -and $birthdayThisYear.Date -le $CampEnd.Date) {
+            return $birthdayThisYear
+        }
+    }
+    return $null
 }
 
 function Get-DutchMonthName {
@@ -416,8 +469,14 @@ function Select-HitFilePath {
         Optionele lijst van volledige bestandspaden die uitgesloten worden van de selectie.
         Handig om een eerder geselecteerd bestand te verbergen bij een tweede keuze.
 
+        .PARAMETER AllowSkip
+        Als opgegeven, verschijnt optie [0] Overslaan bovenaan het keuzemenu.
+        Bij keuze 0 of lege invoer wordt $null geretourneerd (geen fout).
+        Als er geen bestanden worden gevonden én AllowSkip opgegeven is, wordt eveneens
+        $null geretourneerd in plaats van een afbrekende fout.
+
         .OUTPUTS
-        System.String -- Het absolute pad naar het geselecteerde bestand.
+        System.String of $null -- Het absolute pad naar het geselecteerde bestand, of $null bij overslaan.
     #>
     [CmdletBinding()]
     param(
@@ -428,7 +487,10 @@ function Select-HitFilePath {
         [string]$ScriptDir,
 
         [Parameter()]
-        [string[]]$ExcludePaths = @()
+        [string[]]$ExcludePaths = @(),
+
+        [Parameter()]
+        [switch]$AllowSkip
     )
 
     $candidateFiles = @(
@@ -442,6 +504,10 @@ function Select-HitFilePath {
     )
 
     if ($candidateFiles.Count -eq 0) {
+        if ($AllowSkip) {
+            Write-Verbose "Geen bestanden gevonden voor '$Prompt'. Overgeslagen."
+            return $null
+        }
         $errorRecord = [System.Management.Automation.ErrorRecord]::new(
             [System.IO.FileNotFoundException]::new("Geen xlsx- of csv-bestanden gevonden in: $ScriptDir"),
             'NoDataFilesFound',
@@ -451,7 +517,7 @@ function Select-HitFilePath {
         $PSCmdlet.ThrowTerminatingError($errorRecord)
     }
 
-    if ($candidateFiles.Count -eq 1) {
+    if ($candidateFiles.Count -eq 1 -and -not $AllowSkip) {
         Write-Verbose "Automatisch geselecteerd: $($candidateFiles[0].Name)"
         return $candidateFiles[0].FullName
     }
@@ -459,6 +525,9 @@ function Select-HitFilePath {
     Write-Host ''
     Write-Host "${Prompt}:" -ForegroundColor Cyan
     Write-Host ''
+    if ($AllowSkip) {
+        Write-Host '  [0] Overslaan' -ForegroundColor DarkGray
+    }
     for ($i = 0; $i -lt $candidateFiles.Count; $i++) {
         Write-Host "  [$($i + 1)] $($candidateFiles[$i].Name)" -ForegroundColor White
     }
@@ -467,15 +536,29 @@ function Select-HitFilePath {
     $selectedPath = $null
     $validChoice  = $false
     while (-not $validChoice) {
-        $choiceInput  = Read-Host "Kies een bestand (1-$($candidateFiles.Count))"
-        $choiceNumber = 0
-        if ([int]::TryParse($choiceInput, [ref]$choiceNumber) -and
-            $choiceNumber -ge 1 -and $choiceNumber -le $candidateFiles.Count) {
-            $selectedPath = $candidateFiles[$choiceNumber - 1].FullName
-            $validChoice  = $true
+        $prompt = if ($AllowSkip) { "Kies een bestand (0 = overslaan, 1-$($candidateFiles.Count))" } else { "Kies een bestand (1-$($candidateFiles.Count))" }
+        $choiceInput  = Read-Host $prompt
+
+        if ($AllowSkip -and [string]::IsNullOrWhiteSpace($choiceInput)) {
+            Write-Verbose 'Overgeslagen (lege invoer).'
+            return $null
         }
-        else {
-            Write-Host "Ongeldige keuze. Voer een nummer in van 1 t/m $($candidateFiles.Count)." -ForegroundColor Yellow
+
+        $choiceNumber = 0
+        if ([int]::TryParse($choiceInput, [ref]$choiceNumber)) {
+            if ($AllowSkip -and $choiceNumber -eq 0) {
+                Write-Verbose 'Overgeslagen (keuze 0).'
+                return $null
+            }
+            if ($choiceNumber -ge 1 -and $choiceNumber -le $candidateFiles.Count) {
+                $selectedPath = $candidateFiles[$choiceNumber - 1].FullName
+                $validChoice  = $true
+            }
+        }
+
+        if (-not $validChoice) {
+            $rangeHint = if ($AllowSkip) { "0 t/m $($candidateFiles.Count)" } else { "1 t/m $($candidateFiles.Count)" }
+            Write-Host "Ongeldige keuze. Voer een nummer in van $rangeHint." -ForegroundColor Yellow
         }
     }
     Write-Verbose "Geselecteerd: $selectedPath"
@@ -509,10 +592,109 @@ function Get-HitOutputBaseName {
     return $cleanName
 }
 
+function Import-ParticipantFile {
+    <#
+        .SYNOPSIS
+        Importeert een deelnemersbestand (xlsx of csv) en retourneert de rijen.
+
+        .DESCRIPTION
+        Ondersteunt Excel-bestanden (.xlsx, via Import-Excel) en
+        puntkommagescheiden CSV-bestanden (.csv, via Import-Csv -Delimiter ';').
+        Genereert een afbrekende fout bij een niet-ondersteund bestandsformaat.
+
+        .PARAMETER Path
+        Het volledige pad naar het te importeren bestand.
+
+        .OUTPUTS
+        System.Object[] -- Een array van geparseerde rijen.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $extension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+    switch ($extension) {
+        '.csv'  { return @(Import-Csv -Path $Path -Delimiter ';' -ErrorAction Stop) }
+        '.xlsx' { return @(Import-Excel -Path $Path -ErrorAction Stop) }
+        default {
+            $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                [System.ArgumentException]::new("Niet-ondersteund bestandsformaat: $extension"),
+                'UnsupportedFileFormat',
+                [System.Management.Automation.ErrorCategory]::InvalidArgument,
+                $Path
+            )
+            $PSCmdlet.ThrowTerminatingError($errorRecord)
+        }
+    }
+}
+
+function ConvertTo-NormalizedParticipant {
+    <#
+        .SYNOPSIS
+        Normaliseert een rij uit een deelnemersbestand naar een gestandaardiseerd object.
+
+        .DESCRIPTION
+        Ondersteunt twee kolomformaten:
+        - HIT-registratiesysteem: 'Voornaam', 'Tussenvoegsel', 'Achternaam', 'Geboortedatum'
+        - Scouting-CSV: 'Lid voornaam', 'Lid tussenvoegsel', 'Lid achternaam', 'Lid geboortedatum'
+        Retourneert $null voor lege of niet-herkenbare rijen.
+
+        .PARAMETER Row
+        De te normaliseren rij als PSObject (afkomstig uit Import-Excel of Import-Csv).
+
+        .OUTPUTS
+        PSCustomObject met Sleutel, VolledigeNaam, Geboortedatum — of $null.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [psobject]$Row
+    )
+
+    $columnNames = $Row.PSObject.Properties.Name
+
+    if ($columnNames -contains 'Lid voornaam') {
+        $firstName    = [string]$Row.'Lid voornaam'
+        $insertion    = [string]$Row.'Lid tussenvoegsel'
+        $lastName     = [string]$Row.'Lid achternaam'
+        $rawBirthDate = $Row.'Lid geboortedatum'
+    }
+    elseif ($columnNames -contains 'Voornaam') {
+        $firstName    = [string]$Row.'Voornaam'
+        $insertion    = if ($columnNames -contains 'Tussenvoegsel') { [string]$Row.'Tussenvoegsel' } else { '' }
+        $lastName     = [string]$Row.'Achternaam'
+        $rawBirthDate = $Row.'Geboortedatum'
+    }
+    else {
+        Write-Warning 'Onbekend kolomformaat — rij overgeslagen.'
+        return $null
+    }
+
+    $nameParts = @($firstName, $insertion, $lastName) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $fullName  = ($nameParts -join ' ').Trim()
+
+    if ([string]::IsNullOrWhiteSpace($fullName)) {
+        return $null
+    }
+
+    $birthDate    = ConvertFrom-HitBirthDate -RawValue $rawBirthDate
+    $birthDateKey = if ($null -ne $birthDate) { $birthDate.ToString('yyyy-MM-dd') } else { '' }
+    $key          = "$($fullName.ToLowerInvariant())|$birthDateKey"
+
+    return [PSCustomObject]@{
+        Sleutel       = $key
+        VolledigeNaam = $fullName
+        Geboortedatum = $birthDate
+    }
+}
+
 Export-ModuleMember -Function @(
     'Get-EasterSunday',
     'Get-AgeAtDate',
     'Get-BirthdayDuringCamp',
+    'Get-BirthdayDateDuringCamp',
     'Get-DutchMonthName',
     'Get-DutchDayName',
     'Get-DutchGroupSizeLabel',
@@ -520,5 +702,7 @@ Export-ModuleMember -Function @(
     'Resolve-HitExcelPath',
     'Select-HitFilePath',
     'ConvertFrom-HitBirthDate',
-    'Get-HitOutputBaseName'
+    'Get-HitOutputBaseName',
+    'Import-ParticipantFile',
+    'ConvertTo-NormalizedParticipant'
 )
