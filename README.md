@@ -20,12 +20,12 @@ PowerShell-scriptsuite voor het verwerken van HIT-deelnemerslijsten (Scouting Ne
 
 ## Get-HitStatistic.ps1
 
-Leest het deelnemers-Excel-bestand en toont een overzichtelijk rapport:
+Leest twee deelnemers-Excel-bestanden (huidig jaar en vorig jaar) en toont een overzichtelijk rapport op de console. De gebruiker selecteert beide bestanden via een interactief keuzemenu.
 
 ```
 Goede Vrijdag:  3 april 2026
 2e Paasdag:     6 april 2026
-Statistieken over aanmeldingen [Zeilzwerf Fryslân] [2026]:
+Statistieken over aanmeldingen Zeilzwerf Fryslân 2026 :
 - 12 dames, 13 heren
 
 - 13 subgroepjes
@@ -41,6 +41,11 @@ Statistieken over aanmeldingen [Zeilzwerf Fryslân] [2026]:
 - 6 x 18 jaar oud
 
 - Jan de Vries wordt 17 op 5 april
+
+- 3 deelnemer(s) waren er vorig jaar ook bij:
+  - Anna de Boer (12-03-2010)
+  - Bram van Dijk (05-07-2009)
+  - Laura Jansen (22-11-2008)
 ```
 
 ### Onderdelen rapport
@@ -51,6 +56,7 @@ Statistieken over aanmeldingen [Zeilzwerf Fryslân] [2026]:
 | **Subgroepen** | Aantal groepjes en verdeling op grootte |
 | **Leeftijden** | Leeftijd per deelnemer berekend op de startdatum van het kamp |
 | **Jarigen** | Wie is er jarig tijdens het kamp (naam, nieuwe leeftijd, datum) |
+| **Terugkerende deelnemers** | Deelnemers die ook in de vorigjaarlijst voorkomen (naam + geboortedatum) |
 
 ### Gebruik
 
@@ -60,7 +66,7 @@ Statistieken over aanmeldingen [Zeilzwerf Fryslân] [2026]:
 .\Get-HitStatistic.ps1 -Verbose
 ```
 
-Het script vraagt interactief om het jaar te bevestigen (standaard: huidig jaar).
+Het script vraagt interactief om het jaar te bevestigen. Vervolgens kiest de gebruiker via een keuzemenu het huidigjaar-bestand, gevolgd door het vorigjaar-bestand (ter vergelijking).
 
 ### Parameters
 
@@ -103,9 +109,14 @@ Outputbestandsnaam: `Deelnemerslijst_[naam]_[jaar]_Bijzonderheden.xlsx`
 
 Exporteert een Excel-bestand met contactgegevens van alle deelnemers, gesorteerd op voornaam en achternaam.
 
-Kolommen in het outputbestand: `Voornaam`, `Achternaam`, `Geslacht`, `Geboortedatum`, `Contactpersoon`, `Noodnummer`, `Lid mobiel`
+Kolommen in het outputbestand: `Groep`, `Voornaam`, `Achternaam`, `Geslacht`, `Geboortedatum`, `Contactpersoon`, `Noodnummer`, `Lid mobiel`, `Bijzonderheden`
 
-Telefoonnummers en geboortedatum worden opgeslagen als tekst (voorloopnullen blijven behouden).
+- **Bijzonderheden** bevat automatisch gegenereerde aantekeningen, gescheiden door ` - `:
+  - De verjaardagsdatum als een deelnemer jarig is tijdens het kamp (bijv. `vrijdag 3 april jarig (wordt 15)`).
+  - `Was er vorig jaar ook` als de deelnemer ook in het optioneel geselecteerde vorigjaar-bestand staat.
+- Telefoonnummers en geboortedatum worden opgeslagen als tekst (voorloopnullen blijven behouden).
+
+Na het kiezen van het huidigjaar-bestand vraagt het script optioneel om een **vorigjaar-bestand** (keuze `[0]` of lege invoer = overslaan). Als dit bestand is geselecteerd, wordt de `Bijzonderheden`-kolom aangevuld met `Was er vorig jaar ook` voor terugkerende deelnemers.
 
 Outputbestandsnaam: `Deelnemerslijst_[naam]_[jaar]_Contactgegevens.xlsx`
 
@@ -167,7 +178,7 @@ Het script berekent automatisch:
 
 ## Mail02-1_Dag_voor_Merchandise_Deadline.ps1
 
-Genereert een kopieerklare herinneringsmail over de aankomende merchandise-besteldatum, klaar om te plakken in Gmail. Verstuur deze mail de dag vóór de merchandise-deadline (dus de donderdag ervoor).
+Genereert een kopieerklare herinneringsmail over de aankomende merchandise-besteldatum, klaar om te plakken in Gmail. Verstuur deze mail uiterlijk twee dagen vóór de merchandise-deadline (de dinsdag ervoor).
 
 De merchandise-deadline is de **donderdagavond om 22:00, twee weken vóór de start van het kamp**.
 Ga terug vanuit (campStart − 14 dagen) naar de laatste donderdag op of vóór die datum.
@@ -178,7 +189,7 @@ De output bestaat uit drie afzonderlijk te kopiëren secties:
 - **Onderwerp** — `[KampNaam] - Reminder merchandise bestelling`
 - **Body** — korte herinnering met de uiterste besteldatum
 
-Bovenaan de output verschijnt een waarschuwing met de uiterste verzenddatum (de donderdag vóór de merchandise-deadline).
+Bovenaan de output verschijnt een waarschuwing met de uiterste verzenddatum (twee dagen vóór de merchandise-deadline, de dinsdag ervoor).
 
 ### Gebruik
 
@@ -241,6 +252,7 @@ Het script berekent en haalt automatisch op:
 | `-MedeKampNaam` | Nee | `HIT Sail Fryslân` | Naam van het mede-kamp waarmee de afsluiting gezamenlijk plaatsvindt |
 | `-AfsluitingsTijd` | Nee | `13:00` | Tijdstip van de gezamenlijke afsluiting |
 | `-WelkomOudersTijd` | Nee | `12:30` | Tijdstip waarop ouders welkom zijn bij de afsluiting |
+| `-TestWeerDatum` | Nee | Huidige datum | Startdatum voor de weerscheck, uitsluitend voor testdoeleinden. Wordt genegeerd als Goede Vrijdag binnen het 16-daagse voorspellingsvenster van Open-Meteo valt; anders worden datums vanaf deze datum gebruikt |
 | `-EmailKolom` | Nee | `Mailadres` | Kolomnaam in het Excel-bestand met de e-mailadressen |
 | `-Verbose` | Nee | — | Toont gedetailleerde voortgangsberichten |
 
@@ -325,21 +337,29 @@ Geen bestandsparameters — de CSV-selectie verloopt volledig via interactieve c
 
 ---
 
-## Bestandsselectie (alle scripts)
+## Bestandsselectie
 
-Alle scripts zoeken automatisch naar het invoerbestand in dezelfde map als het script:
+Scripts gebruiken twee verschillende methodes om het invoerbestand te selecteren:
 
-1. Zoek op `*-alles.xlsx`
+### Resolve-HitExcelPath — automatisch, met prioriteit op `*-alles.xlsx`
+
+Gebruikt door: `Export-HitBijzonderheden.ps1`, `Mail01-3_Weken_voor_Goede_Vrijdag.ps1`, `Mail02-1_Dag_voor_Merchandise_Deadline.ps1`, `Mail03-1_Week_voor_Goede_Vrijdag.ps1`
+
+1. Zoek op `*-alles.xlsx` in de scriptmap
    - 1 treffer → automatisch geselecteerd
    - Meerdere treffers → interactief keuzemenu
-2. Als geen `*-alles.xlsx` gevonden: zoek op `*.xlsx` (exclusief eerder gegenereerde `Deelnemerslijst_*`-bestanden), met dezelfde selectielogica
+2. Als geen `*-alles.xlsx` gevonden: zoek op `*.xlsx` (exclusief `Deelnemerslijst_*`-bestanden), met dezelfde selectielogica
 3. Als ook dat niets oplevert → foutmelding
 
-`GenerateBootIndelingBaseData.ps1` en `GenerateMerchandiseBestelling.ps1` gebruiken een ruimere zoekopdracht: alle `*.xlsx`- en `*.csv`-bestanden in de scriptmap (exclusief `Deelnemerslijst_*`). De gebruiker kiest telkens interactief.
+### Select-HitFilePath — interactief keuzemenu voor xlsx én csv
 
-Bij `GenerateBootIndelingBaseData.ps1` en `GenerateMerchandiseBestelling.ps1` wordt het **eerst gekozen bestand automatisch uitgesloten** uit de lijst bij de tweede keuze, zodat hetzelfde bestand niet dubbel geselecteerd kan worden.
+Gebruikt door: `Get-HitStatistic.ps1`, `Export-HitContactgegevens.ps1`, `GenerateBootIndelingBaseData.ps1`, `GenerateMerchandiseBestelling.ps1`
 
-Gegenereerde outputbestanden (`Deelnemerslijst_*`) worden bij de automatische selectie altijd overgeslagen.
+Toont een keuzemenu met alle `*.xlsx`- en `*.csv`-bestanden in de scriptmap (exclusief `Deelnemerslijst_*`). Bij slechts één beschikbaar bestand (zonder `-AllowSkip`) wordt automatisch geselecteerd. Scripts die meerdere bestanden nodig hebben (bijv. huidigjaar + vorigjaar) roepen het menu twee keer aan; het **als eerste geselecteerde bestand wordt bij de tweede keuze automatisch uitgesloten** zodat hetzelfde bestand niet dubbel gekozen kan worden.
+
+`Export-HitContactgegevens.ps1` en `Get-HitStatistic.ps1` bieden ook de `-AllowSkip`-optie voor het tweede bestand: keuze `[0]` of lege invoer slaat de selectie over en retourneert `$null`.
+
+Gegenereerde outputbestanden (`Deelnemerslijst_*`) worden altijd overgeslagen.
 
 ---
 
@@ -349,19 +369,18 @@ Alle scripts verwachten een `.xlsx`-bestand zoals geëxporteerd uit het Scouting
 
 | Kolom | Gebruikt door | Beschrijving |
 |---|---|---|
-| `Kamp` | Statistieken | Kampnaam in de rapporttitel |
+| `Kamp` | Statistieken, E-mailgenerator | Kampnaam in de rapporttitel en het e-mailonderwerp |
 | `Voornaam` | Alle scripts | Voornaam deelnemer |
 | `Achternaam` | Alle scripts | Achternaam deelnemer |
 | `Gender` | Alle scripts | `man` of `vrouw` |
 | `Geboortedatum` | Alle scripts | Geboortedatum (datetime of tekst) |
-| `Subgroep` | Statistieken | Naam van de subgroep |
+| `Subgroep` | Statistieken, Contactgegevens, Bootindeling | Subgroep van de deelnemer (kolom `Groep` in de output); fallbacks: `Groep`, `Subgroepnaam` |
 | `Dieet` | Bijzonderheden | Dieetwens / -beperking |
 | `Aandachtspunten` | Bijzonderheden | Medische/allergie-aandachtspunten |
 | `Naam noodcontact` | Contactgegevens | Naam van de contactpersoon |
 | `Telefoonnummer noodcontact` | Contactgegevens | Telefoonnummer noodcontact |
 | `Mobiel` | Contactgegevens | Mobiel nummer van de deelnemer |
 | `Mailadres` | E-mailgenerator, Bootindeling | E-mailadres van de deelnemer, gebruikt voor de BCC-lijst en de bootindelingsexport |
-| `Subgroep` | Bootindeling | Subgroep van de deelnemer (kolom `Groep` in de output) |
 
 Overige kolommen worden genegeerd.
 
@@ -386,6 +405,10 @@ Gedeelde module die automatisch wordt ingeladen door alle scripts. Bevat:
 | `Get-HitOutputBaseName` | Genereert een schone basisnaam voor het outputbestand op basis van het inputpad |
 | `Import-ParticipantFile` | Importeert een deelnemersbestand (xlsx of csv) en retourneert de rijen |
 | `ConvertTo-NormalizedParticipant` | Normaliseert een rij uit een deelnemersbestand naar een gestandaardiseerd object met `Sleutel`, `VolledigeNaam` en `Geboortedatum` |
+| `Get-HitCampDates` | Berekent de kampdatums voor een jaar op basis van Pasen: `CampStart` (Goede Vrijdag), `CampEnd` (Tweede Paasdag) en `EasterSunday` |
+| `Get-HitMerchandiseDeadline` | Berekent de uiterste merchandise-besteldatum: donderdag 22:00, twee weken vóór het kamp. Geeft `DateTime`, `Formatted` en `Time` terug |
+| `Import-HitMailData` | Laadt het Excel-bestand, leest de kampnaam (`Kamp`-kolom) en bouwt de BCC-string op. Geeft `KampNaam`, `BccString`, `AllRows` en `ActualColumns` terug |
+| `Write-HitMailOutput` | Schrijft de gestandaardiseerde console-uitvoer: deadline-banner (geel/rood) gevolgd door afgescheiden `BCC`-, `ONDERWERP`- en `EMAIL BODY`-secties |
 
 ---
 
