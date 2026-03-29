@@ -20,15 +20,23 @@ Breedte max 1240px (A4 staand @ 150 dpi).
 
 from __future__ import annotations
 
-import json
 import os
-import re
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+from puzzle_helpers import (
+    CELL_SIZE,
+    PADDING,
+    collect_response,
+    copy_to_clipboard,
+    font as _font,
+    normalize as _normalize,
+    parse_response as _parse_response,
+    show_prompt as _show_prompt_helper,
+)
 
 # ---------------------------------------------------------------------------
 # Stap 1 - Interactieve invoer
@@ -77,127 +85,16 @@ Geef je antwoord UITSLUITEND als geldig JSON in dit formaat, zonder extra tekst:
 """
 
 
-def _copy_to_clipboard(text: str) -> bool:
-    """Kopieer tekst naar Windows-klembord via clip. Geeft True terug bij succes."""
-    try:
-        subprocess.run(
-            "clip",
-            input=text.encode("utf-16-le"),
-            check=True,
-            shell=True,
-        )
-        return True
-    except Exception:
-        return False
-
-
 def _show_prompt(categories: str) -> None:
     """Toon de ChatGPT-prompt in de terminal en kopieer naar klembord."""
-    prompt = CHATGPT_PROMPT_TEMPLATE.replace("{{categories}}", categories)
-
-    print("\n" + "=" * 70)
-    print("STAP 2 - Kopieer de onderstaande prompt naar ChatGPT")
-    print("=" * 70)
-    print(prompt)
-    print("=" * 70)
-
-    if _copy_to_clipboard(prompt):
-        print("\n[OK] De prompt is automatisch naar je klembord gekopieerd.")
-        print("     Plak hem in ChatGPT (chatgpt.com) en voer hem uit.\n")
-    else:
-        print("\n     Kopieer de prompt hierboven handmatig naar ChatGPT.\n")
+    _show_prompt_helper(categories, CHATGPT_PROMPT_TEMPLATE)
 
 
 # ---------------------------------------------------------------------------
-# Stap 3 - JSON-respons inlezen vanuit terminal
+# Stap 3+4 - Respons inlezen en parsen (via puzzle_helpers)
 # ---------------------------------------------------------------------------
 
-def _collect_response() -> str:
-    """
-    Vraag de gebruiker om de JSON-respons van ChatGPT te plakken.
-    Lezen stopt zodra de gebruiker een lege regel invoert NA de JSON-inhoud.
-    """
-    print("STAP 3 - Plak de JSON-respons van ChatGPT hieronder.")
-    print("         Druk na het plakken op Enter en daarna nogmaals Enter (lege regel).\n")
-
-    lines: list[str] = []
-    try:
-        while True:
-            line = input()
-            if line == "" and lines:
-                break
-            lines.append(line)
-    except EOFError:
-        pass
-
-    return "\n".join(lines).strip()
-
-
-# ---------------------------------------------------------------------------
-# Stap 4 - JSON parsen en woorden normaliseren
-# ---------------------------------------------------------------------------
-
-def _normalize(word: str) -> str:
-    """Zet speciale tekens om naar ASCII-hoofdletters."""
-    replacements = {
-        "\u00c2": "A", "\u00c0": "A", "\u00c1": "A", "\u00c4": "A", "\u00c3": "A",
-        "\u00ca": "E", "\u00c8": "E", "\u00c9": "E", "\u00cb": "E",
-        "\u00ce": "I", "\u00cc": "I", "\u00cd": "I", "\u00cf": "I",
-        "\u00d4": "O", "\u00d2": "O", "\u00d3": "O", "\u00d6": "O", "\u00d5": "O",
-        "\u00db": "U", "\u00d9": "U", "\u00da": "U", "\u00dc": "U",
-        "\u00e2": "A", "\u00e0": "A", "\u00e1": "A", "\u00e4": "A", "\u00e3": "A",
-        "\u00ea": "E", "\u00e8": "E", "\u00e9": "E", "\u00eb": "E",
-        "\u00ee": "I", "\u00ec": "I", "\u00ed": "I", "\u00ef": "I",
-        "\u00f4": "O", "\u00f2": "O", "\u00f3": "O", "\u00f6": "O", "\u00f5": "O",
-        "\u00fb": "U", "\u00f9": "U", "\u00fa": "U", "\u00fc": "U",
-        "\u00e7": "C", "\u00c7": "C", "\u00f1": "N", "\u00d1": "N",
-    }
-    result = word.upper()
-    for src, dst in replacements.items():
-        result = result.replace(src.upper(), dst)
-    result = re.sub(r"[^A-Z]", "", result)
-    return result
-
-
-def _parse_response(raw: str) -> list[tuple[str, str]]:
-    """
-    Verwerk de JSON-respons van ChatGPT.
-    Accepteert ook respons omgeven door ```json ... ``` code-blokken.
-    """
-    cleaned = re.sub(r"```(?:json)?\s*", "", raw).strip().rstrip("`").strip()
-
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-        if not match:
-            sys.exit("Geen geldige JSON gevonden in de geplakte respons. Start opnieuw.")
-        try:
-            data = json.loads(match.group())
-        except json.JSONDecodeError as exc:
-            sys.exit(f"JSON-fout: {exc}\nGepaste tekst:\n{cleaned}")
-
-    entries = data.get("woorden", [])
-    if not entries:
-        sys.exit(
-            "Geen 'woorden'-lijst gevonden in de JSON.\n"
-            "Zorg dat ChatGPT het gevraagde JSON-formaat teruggeeft."
-        )
-
-    words_clues: list[tuple[str, str]] = []
-    seen: set[str] = set()
-    for item in entries:
-        raw_word = str(item.get("woord", "")).strip()
-        clue     = str(item.get("omschrijving", "")).strip()
-        word     = _normalize(raw_word)
-        if not word or not clue or len(word) < 3 or word in seen:
-            continue
-        seen.add(word)
-        words_clues.append((word, clue))
-
-    words_clues.sort(key=lambda x: -len(x[0]))
-    print(f"\nVerwerkt: {len(words_clues)} woorden uit de ChatGPT-respons.")
-    return words_clues
+_collect_response = collect_response
 
 
 # ---------------------------------------------------------------------------
@@ -476,8 +373,7 @@ def assign_numbers(grid: Grid, placements: list[Placement]) -> tuple[
 
 from PIL import Image, ImageDraw, ImageFont  # noqa: E402
 
-CELL_SIZE    = 28          # px per cel
-PADDING      = 30          # canvas marge
+# CELL_SIZE and PADDING are imported from puzzle_helpers
 MAX_WIDTH    = 1240        # A4 staand @ 150 dpi
 CLUE_FONT_PT = 10
 NUM_FONT_PT  = 7
@@ -486,28 +382,7 @@ LINE_H       = 15          # regelafstand aanwijzingen
 COL_GAP      = 20          # tussenruimte kolommen aanwijzingen
 
 
-def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
-    candidates = [
-        r"C:\Windows\Fonts\arialbd.ttf" if bold else r"C:\Windows\Fonts\arial.ttf",
-        r"C:\Windows\Fonts\Arial Bold.ttf" if bold else r"C:\Windows\Fonts\Arial.ttf",
-    ]
-    # DejaVu fallback (bundled with Pillow or available on many systems)
-    for name in ("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf",
-                 "DejaVuSans.ttf"):
-        for base in (
-            r"C:\Windows\Fonts",
-            os.path.join(os.path.dirname(sys.executable), "Lib", "site-packages",
-                         "PIL", "fonts"),
-        ):
-            candidates.append(os.path.join(base, name))
-
-    for path in candidates:
-        if os.path.exists(path):
-            try:
-                return ImageFont.truetype(path, size)
-            except Exception:
-                continue
-    return ImageFont.load_default()
+# _font is imported from puzzle_helpers as _font
 
 
 def _render_png(
